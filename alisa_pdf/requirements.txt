@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+transformers
+torch
+unstructured[local-inference]
+python-magic
+pytesseract
+Pillow
+reportlab
+pymupdf
+rouge-score
+textstat
+tabulate

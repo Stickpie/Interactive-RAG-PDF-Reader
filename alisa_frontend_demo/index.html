@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Simplifier</title>
+  <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+
+    button {
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .active {
+      background: black;
+      color: white;
+    }
+
+    #pdf-pages {
+      width: 100%;
+      max-height: 80vh;
+      overflow: auto;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #525659;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .pdf-page {
+      position: relative;
+      display: block;
+      margin: 0 auto 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    }
+
+    .pdf-page canvas {
+      display: block;
+      vertical-align: top;
+    }
+
+    .textLayer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      line-height: 1;
+    }
+
+    .textLayer span {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0 0;
+    }
+
+    .status {
+      margin-bottom: 10px;
+      color: #444;
+    }
+
+    .inquire-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .inquire-backdrop.visible {
+      display: flex;
+    }
+
+    .inquire-panel {
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px 18px;
+      max-width: 520px;
+      width: calc(100% - 32px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    .inquire-panel h2 {
+      margin: 0 0 10px;
+      font-size: 1.1rem;
+    }
+
+    .inquire-panel label {
+      display: block;
+      font-size: 0.85rem;
+      color: #555;
+      margin-bottom: 4px;
+    }
+
+    .inquire-panel textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      resize: vertical;
+    }
+
+    .segment-preview {
+      max-height: 72px;
+      overflow: auto;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+      color: #333;
+      background: #f5f5f5;
+      padding: 8px;
+      border-radius: 6px;
+    }
+
+    .inquire-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    #answerBox {
+      min-height: 100px;
+      margin-top: 10px;
+      background: #fafafa;
+    }
+  </style>
+</head>
+<body>
+  <h1>PDF Simplifier</h1>
+
+  <div class="controls">
+    <input type="file" id="pdfInput" accept="application/pdf" />
+    <button id="simplifyBtn">Simplify PDF</button>
+    <button id="showOriginalBtn" class="active">Original</button>
+    <button id="showSimplifiedBtn" disabled>Simplified</button>
+  </div>
+
+  <div class="status" id="status">Upload a PDF to begin.</div>
+
+  <div id="pdf-pages" aria-label="PDF pages"></div>
+
+  <div class="inquire-backdrop" id="inquireBackdrop" role="dialog" aria-modal="true" aria-labelledby="inquireTitle">
+    <div class="inquire-panel">
+      <h2 id="inquireTitle">Inquire</h2>
+      <label for="segmentPreview">Highlighted text</label>
+      <div class="segment-preview" id="segmentPreview"></div>
+      <label for="questionInput">Your question</label>
+      <textarea id="questionInput" rows="3" placeholder="Ask about the highlighted text…"></textarea>
+      <label for="answerBox">Answer</label>
+      <textarea id="answerBox" readonly rows="6" placeholder="The answer will appear here."></textarea>
+      <div class="inquire-actions">
+        <button type="button" id="inquireCancel">Cancel</button>
+        <button type="button" id="inquireSubmit">Ask</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if (typeof pdfjsLib !== "undefined") {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+    }
+
+    const pdfInput = document.getElementById("pdfInput");
+    const simplifyBtn = document.getElementById("simplifyBtn");
+    const showOriginalBtn = document.getElementById("showOriginalBtn");
+    const showSimplifiedBtn = document.getElementById("showSimplifiedBtn");
+    const pdfPages = document.getElementById("pdf-pages");
+    const statusText = document.getElementById("status");
+    const inquireBackdrop = document.getElementById("inquireBackdrop");
+    const segmentPreview = document.getElementById("segmentPreview");
+    const questionInput = document.getElementById("questionInput");
+    const answerBox = document.getElementById("answerBox");
+    const inquireCancel = document.getElementById("inquireCancel");
+    const inquireSubmit = document.getElementById("inquireSubmit");
+
+    const API_BASE = "http://127.0.0.1:8000";
+
+    let originalPdfUrl = null;
+    let simplifiedPdfUrl = null;
+    let selectedFile = null;
+    let currentView = "original";
+    let highlightedSegment = "";
+
+    function renderTextLayerFallback(textContent, container, viewport) {
+      const items = textContent.items;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const s = item.str;
+        if (!s || !s.trim()) continue;
+        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const span = document.createElement("span");
+        span.textContent = s;
+        span.style.left = tx[4] + "px";
+        span.style.top = tx[5] + "px";
+        const fontHeight = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+        span.style.fontSize = fontHeight + "px";
+        container.appendChild(span);
+      }
+    }
+
+    async function renderPdf(url) {
+      if (typeof pdfjsLib === "undefined") {
+        statusText.textContent = "PDF.js failed to load. Check your network.";
+        return;
+      }
+      pdfPages.innerHTML = "";
+      const loadingTask = pdfjsLib.getDocument(url);
+      const pdf = await loadingTask.promise;
+      const scale = 1.25;
+
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const viewport = page.getViewport({ scale });
+        const wrap = document.createElement("div");
+        wrap.className = "pdf-page";
+        wrap.style.width = viewport.width + "px";
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        const textLayerDiv = document.createElement("div");
+        textLayerDiv.className = "textLayer";
+        const textContent = await page.getTextContent();
+
+        try {
+          if (typeof pdfjsLib.renderTextLayer === "function") {
+            pdfjsLib.renderTextLayer({
+              textContent,
+              container: textLayerDiv,
+              viewport,
+              textDivs: [],
+            });
+          } else {
+            renderTextLayerFallback(textContent, textLayerDiv, viewport);
+          }
+        } catch (e) {
+          console.warn("renderTextLayer failed, using fallback", e);
+          textLayerDiv.innerHTML = "";
+          renderTextLayerFallback(textContent, textLayerDiv, viewport);
+        }
+
+        wrap.appendChild(canvas);
+        wrap.appendChild(textLayerDiv);
+        pdfPages.appendChild(wrap);
+      }
+    }
+
+    function showPdf(url) {
+      statusText.textContent = "Rendering PDF…";
+      renderPdf(url).then(() => {
+        statusText.textContent =
+          currentView === "simplified"
+            ? "Showing simplified PDF (select text to inquire)."
+            : "Showing original PDF (select text to inquire).";
+      }).catch((err) => {
+        console.error(err);
+        statusText.textContent = "Could not render PDF.";
+      });
+    }
+
+    function setActiveButton(activeBtn) {
+      showOriginalBtn.classList.remove("active");
+      showSimplifiedBtn.classList.remove("active");
+      activeBtn.classList.add("active");
+    }
+
+    function openInquire(segment) {
+      highlightedSegment = segment;
+      segmentPreview.textContent = segment;
+      questionInput.value = "";
+      answerBox.value = "";
+      inquireBackdrop.classList.add("visible");
+      questionInput.focus();
+    }
+
+    function closeInquire() {
+      inquireBackdrop.classList.remove("visible");
+      highlightedSegment = "";
+    }
+
+    pdfInput.addEventListener("change", () => {
+      const file = pdfInput.files[0];
+      if (!file) return;
+
+      selectedFile = file;
+
+      if (originalPdfUrl) URL.revokeObjectURL(originalPdfUrl);
+      originalPdfUrl = URL.createObjectURL(file);
+
+      simplifiedPdfUrl = null;
+      showSimplifiedBtn.disabled = true;
+
+      currentView = "original";
+      showPdf(originalPdfUrl);
+      setActiveButton(showOriginalBtn);
+      statusText.textContent = "Original PDF loaded.";
+    });
+
+    showOriginalBtn.addEventListener("click", () => {
+      if (!originalPdfUrl) return;
+      currentView = "original";
+      showPdf(originalPdfUrl);
+      setActiveButton(showOriginalBtn);
+    });
+
+    showSimplifiedBtn.addEventListener("click", () => {
+      if (!simplifiedPdfUrl) return;
+      currentView = "simplified";
+      showPdf(simplifiedPdfUrl);
+      setActiveButton(showSimplifiedBtn);
+    });
+
+    pdfPages.addEventListener("mouseup", () => {
+      const sel = window.getSelection();
+      const text = sel ? sel.toString().trim() : "";
+      if (text.length > 0) {
+        openInquire(text);
+      }
+    });
+
+    inquireCancel.addEventListener("click", closeInquire);
+
+    inquireBackdrop.addEventListener("click", (e) => {
+      if (e.target === inquireBackdrop) closeInquire();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && inquireBackdrop.classList.contains("visible")) {
+        closeInquire();
+      }
+    });
+
+    inquireSubmit.addEventListener("click", async () => {
+      const question = questionInput.value.trim();
+      if (!question) {
+        answerBox.value = "Please enter a question.";
+        return;
+      }
+      if (!highlightedSegment) {
+        answerBox.value = "No highlighted text.";
+        return;
+      }
+
+      answerBox.value = "Loading…";
+      inquireSubmit.disabled = true;
+
+      try {
+        const response = await fetch(`${API_BASE}/inquire/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            segment: highlightedSegment,
+            question,
+          }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const d = data.detail;
+          let msg =
+            typeof d === "string"
+              ? d
+              : Array.isArray(d)
+                ? d.map((x) => (x && x.msg) || JSON.stringify(x)).join(" ")
+                : d != null
+                  ? JSON.stringify(d)
+                  : "";
+          answerBox.value =
+            msg || data.message || `Request failed (${response.status}).`;
+        } else {
+          answerBox.value = data.answer ?? "";
+        }
+      } catch (err) {
+        console.error(err);
+        answerBox.value = "Could not reach the API. Is the server running?";
+      } finally {
+        inquireSubmit.disabled = false;
+      }
+    });
+
+    simplifyBtn.addEventListener("click", async () => {
+      if (!selectedFile) {
+        statusText.textContent = "Please upload a PDF first.";
+        return;
+      }
+
+      statusText.textContent = "Uploading and simplifying…";
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      try {
+        const response = await fetch(`${API_BASE}/simplify-pdf/`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to simplify PDF.");
+        }
+
+        const blob = await response.blob();
+
+        if (simplifiedPdfUrl) URL.revokeObjectURL(simplifiedPdfUrl);
+        simplifiedPdfUrl = URL.createObjectURL(blob);
+
+        showSimplifiedBtn.disabled = false;
+        currentView = "simplified";
+        showPdf(simplifiedPdfUrl);
+        setActiveButton(showSimplifiedBtn);
+        statusText.textContent = "Simplified PDF ready.";
+      } catch (error) {
+        console.error(error);
+        statusText.textContent = "Error simplifying PDF.";
+      }
+    });
+  </script>
+</body>
+</html>

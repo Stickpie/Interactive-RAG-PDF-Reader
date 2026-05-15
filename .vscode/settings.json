@@ -1,0 +1,3 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/alisa_pdf/.venv/Scripts/python.exe"
+}
