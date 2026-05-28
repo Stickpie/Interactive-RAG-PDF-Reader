@@ -36,9 +36,9 @@ def clean_text(text: str) -> str:
     text = text.replace("\ufeff", "")
 
     # remove bullet symbols entirely
-    text = text.replace("●", " ")
-    text = text.replace("○", " ")
-    text = text.replace("■", " ")
+    #text = text.replace("●", " ")
+    #text = text.replace("○", " ")
+    #text = text.replace("■", " ")
 
     # collapse all whitespace into single spaces
     text = re.sub(r"\s+", " ", text)
