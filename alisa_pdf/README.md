@@ -1,6 +1,6 @@
-# Alisa — Dyslexia-Friendly PDF Reader
+# Dyslexia-Friendly PDF Reader
 
-Alisa is a reading assistant that simplifies academic PDFs into dyslexia-friendly language, keeps a personal document library in the browser, and answers questions about highlighted passages using retrieval-augmented generation (RAG).
+This is a reading assistant that simplifies academic PDFs into dyslexia-friendly language, keeps a personal document library in the browser, and answers questions about highlighted passages using retrieval-augmented generation (RAG).
 
 The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAPI backend (`alisa_pdf/`), and a RAG pipeline (`alisa_v2/`).
 
@@ -231,9 +231,3 @@ This project will eventually run on a **home server** exposed to the internet. U
 - Run uvicorn (or a reverse proxy) with appropriate host/port and TLS.
 - Ensure Ollama, Chroma persistence, and model weights are available on the server.
 - Revisit CORS and authentication (currently `allow_origins=["*"]` for local dev).
-
----
-
-## Course
-
-COE70B — Winter 2026
