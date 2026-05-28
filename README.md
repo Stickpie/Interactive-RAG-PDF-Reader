@@ -4,8 +4,6 @@ This is a reading assistant that simplifies academic PDFs into dyslexia-friendly
 
 The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAPI backend (`alisa_pdf/`), and a RAG pipeline (`alisa_v2/`).
 
-> Detailed docs are also in [`alisa_pdf/README.md`](alisa_pdf/README.md) (kept in sync with this file).
-
 ---
 
 ## What the application does
