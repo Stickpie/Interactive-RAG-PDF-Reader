@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 import io
 import json
+import re
 import shutil
 import os
 import sys
@@ -26,12 +27,18 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Stored-Stem"],
 )
 
 BASE_FOLDER = os.path.dirname(os.path.abspath(__file__))
 ALISA_V2 = os.path.abspath(os.path.join(BASE_FOLDER, "..", "alisa_v2"))
 UNPARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "UnparsedText"))
+PARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "ParsedText"))
+CHROMA_PATH = os.path.abspath(os.path.join(ALISA_V2, "chroma_db"))
 INQUIRE_STATE_PATH = os.path.join(ALISA_V2, "inquire_state.json")
+
+# Stored PDF basename without extension: 32-hex uuid + underscore + original name (no path chars).
+STORED_STEM_RE = re.compile(r"^[a-f0-9]{32}_[^\\/:*?\"<>|]+$", re.IGNORECASE)
 
 
 class TextRequest(BaseModel):
@@ -55,23 +62,6 @@ def _stored_upload_path(original_filename: str) -> str:
 async def root():
     return {"message": "API is running. Open /docs to test PDF upload."}
 
-
-@app.post("/api/simplify")
-async def simplify_text_endpoint(req: TextRequest):
-    simplified = simplify_text_chunked(req.text)
-    return {"simplified": simplified, "confidence": 1.0}
-
-
-@app.post("/api/ocr")
-async def ocr_image(file: UploadFile = File(...)):
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
-    text = pytesseract.image_to_string(image)
-    if not text.strip():
-        return {"text": "", "error": "No text detected in image"}
-    return {"text": text.strip()}
-
-
 def cleanup_files(*paths):
     for path in paths:
         try:
@@ -79,6 +69,72 @@ def cleanup_files(*paths):
                 os.remove(path)
         except Exception:
             pass
+
+
+def _delete_chroma_chunks_for_source(parsed_txt_path: str) -> None:
+    """Remove Chroma chunks whose document source matches the given ParsedText .txt path."""
+    try:
+        sys.path.insert(0, ALISA_V2)
+        from get_embedding_function import get_embedding_function
+        from langchain_chroma import Chroma
+
+        if not os.path.exists(CHROMA_PATH):
+            return
+
+        target = os.path.normcase(os.path.abspath(parsed_txt_path))
+        db = Chroma(
+            persist_directory=CHROMA_PATH,
+            embedding_function=get_embedding_function(),
+        )
+        batch = db.get(include=["metadatas"])
+        ids = batch.get("ids") or []
+        metas = batch.get("metadatas") or []
+        to_delete = []
+        for doc_id, meta in zip(ids, metas):
+            if not meta:
+                continue
+            src = meta.get("source")
+            if not src:
+                continue
+            if os.path.normcase(os.path.abspath(str(src))) == target:
+                to_delete.append(doc_id)
+        if to_delete:
+            db.delete(ids=to_delete)
+    except Exception:
+        traceback.print_exc()
+
+
+@app.delete("/library-document/{stem}")
+async def delete_library_document(stem: str):
+    """
+    Delete server-side unparsed PDF, ParsedText pair, and matching Chroma chunks for one upload.
+    `stem` is the basename without extension under UnparsedText/ (see X-Stored-Stem on simplify-pdf).
+    """
+    if not STORED_STEM_RE.match(stem):
+        raise HTTPException(status_code=400, detail="Invalid document stem.")
+
+    unparsed_pdf = os.path.join(UNPARSED_DIR, stem + ".pdf")
+    parsed_txt = os.path.join(PARSED_DIR, stem + ".txt")
+    parsed_unstructured = os.path.join(PARSED_DIR, stem + "_unstructured.txt")
+
+    had_any = (
+        os.path.isfile(unparsed_pdf)
+        or os.path.isfile(parsed_txt)
+        or os.path.isfile(parsed_unstructured)
+    )
+
+    _delete_chroma_chunks_for_source(parsed_txt)
+
+    cleanup_files(unparsed_pdf, parsed_txt, parsed_unstructured)
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "stem": stem,
+            "note": "Files removed if present; Chroma entries removed by source match.",
+            "had_files": had_any,
+        }
+    )
 
 
 @app.post("/simplify-pdf/")
@@ -117,10 +173,10 @@ async def simplify_pdf(file: UploadFile = File(...)):
 
         try:
             sys.path.insert(0, ALISA_V2)
-            from parse_text import parse_text as parse_pdf_to_parsed_text
+            from parse_text import parse_text as parse_text
             from populate_chroma import load_documents, split_documents, add_to_chroma
 
-            parse_pdf_to_parsed_text(stored_path)
+            parse_text(stored_path)
             documents = load_documents()
             if documents:
                 chunks = split_documents(documents)
@@ -130,12 +186,15 @@ async def simplify_pdf(file: UploadFile = File(...)):
             traceback.print_exc()
             print(e)
 
-        return FileResponse(
+        stored_stem = os.path.splitext(os.path.basename(stored_path))[0]
+        response = FileResponse(
             path=output_path,
             filename="simplified_output.pdf",
             media_type="application/pdf",
             background=BackgroundTask(cleanup_files, input_path, output_path),
         )
+        response.headers["X-Stored-Stem"] = stored_stem
+        return response
 
     except HTTPException:
         cleanup_files(input_path, output_path)

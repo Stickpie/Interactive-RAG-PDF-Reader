@@ -6,52 +6,368 @@
   <title>PDF Simplifier</title>
   <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+    :root {
+      color-scheme: dark;
+      --bg: #070712;
+      --bg-2: #0d0b1d;
+      --panel: rgba(18, 15, 35, 0.82);
+      --panel-strong: rgba(25, 19, 48, 0.96);
+      --border: rgba(180, 112, 255, 0.2);
+      --border-strong: rgba(205, 148, 255, 0.44);
+      --text: #f4efff;
+      --muted: #a9a1bd;
+      --muted-2: #7d748f;
+      --purple: #a855f7;
+      --purple-2: #7c3aed;
+      --pink: #ec4899;
+      --cyan: #22d3ee;
+      --danger: #ff6b9a;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+      --glow: 0 0 22px rgba(168, 85, 247, 0.35), 0 0 44px rgba(236, 72, 153, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      max-width: 1000px;
-      margin: 30px auto;
-      padding: 0 20px;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 16% 14%, rgba(168, 85, 247, 0.24), transparent 28%),
+        radial-gradient(circle at 86% 8%, rgba(34, 211, 238, 0.13), transparent 26%),
+        radial-gradient(circle at 74% 78%, rgba(236, 72, 153, 0.14), transparent 30%),
+        linear-gradient(135deg, #050510 0%, #0b0718 48%, #12091f 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(circle at center, black, transparent 78%);
+      opacity: 0.28;
+      z-index: -1;
+    }
+
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+      align-items: stretch;
+    }
+
+    .sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background:
+        linear-gradient(180deg, rgba(18, 15, 35, 0.94), rgba(9, 8, 20, 0.94)),
+        radial-gradient(circle at top left, rgba(168, 85, 247, 0.18), transparent 42%);
+      padding: 18px 14px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 18px 0 70px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(18px);
+    }
+
+    .sidebar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 8px 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-head span {
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #f6edff;
+      text-shadow: 0 0 16px rgba(168, 85, 247, 0.65);
+    }
+
+    #addFolderBtn {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      font-size: 1.2rem;
+      line-height: 1;
+      border-radius: 999px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: var(--glow);
+    }
+
+    .folder-block {
+      margin-bottom: 8px;
+    }
+
+    .folder-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      border-radius: 14px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      user-select: none;
+      color: var(--muted);
+      border: 1px solid transparent;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease;
+    }
+
+    .folder-row::before {
+      content: "▸";
+      color: var(--purple);
+      font-size: 0.72rem;
+      filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.7));
+    }
+
+    .folder-row:hover {
+      background: rgba(168, 85, 247, 0.1);
+      border-color: var(--border);
+      color: var(--text);
+      transform: translateX(2px);
+    }
+
+    .folder-row.selected-folder {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.23), rgba(236, 72, 153, 0.11));
+      border-color: var(--border-strong);
+      color: #fff;
+      font-weight: 700;
+      box-shadow: inset 0 0 18px rgba(168, 85, 247, 0.12), 0 0 22px rgba(168, 85, 247, 0.13);
+    }
+
+    .folder-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pdf-list {
+      list-style: none;
+      margin: 7px 0 0 18px;
+      padding: 0 0 0 10px;
+      border-left: 1px solid rgba(168, 85, 247, 0.28);
+    }
+
+    .pdf-list li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 8px;
+      border-radius: 12px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: var(--muted);
+      border: 1px solid transparent;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .pdf-list li:hover {
+      background: rgba(255, 255, 255, 0.055);
+      color: #fff;
+      transform: translateX(2px);
+    }
+
+    .pdf-list li.selected-pdf {
+      background: rgba(168, 85, 247, 0.18);
+      border-color: rgba(168, 85, 247, 0.42);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(168, 85, 247, 0.18);
+    }
+
+    .pdf-list li.selected-pdf .pdf-del {
+      color: #ffd1e5;
+    }
+
+    .pdf-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pdf-del,
+    .folder-del {
+      flex-shrink: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      padding: 2px 7px;
+      font-size: 1rem;
+      line-height: 1;
+      color: var(--muted-2);
+      border-radius: 999px;
+      transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .pdf-del:hover,
+    .folder-del:hover {
+      background: rgba(255, 107, 154, 0.14);
+      color: var(--danger);
+      box-shadow: 0 0 16px rgba(255, 107, 154, 0.24);
+    }
+
+    .main-area {
+      flex: 1;
+      padding: 38px 34px;
+      max-width: 1180px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin: 0 0 22px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1;
+      letter-spacing: -0.06em;
+      font-weight: 800;
+      background: linear-gradient(120deg, #fff, #e9d5ff 42%, #c084fc 66%, #f0abfc);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 34px rgba(168, 85, 247, 0.16);
     }
 
     .controls {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       align-items: center;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: rgba(13, 11, 29, 0.68);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    input[type="file"] {
+      max-width: 310px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    input[type="file"]::file-selector-button {
+      margin-right: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      color: #f7efff;
+      background: rgba(168, 85, 247, 0.14);
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 700;
+      transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+    }
+
+    input[type="file"]::file-selector-button:hover {
+      background: rgba(168, 85, 247, 0.24);
+      box-shadow: var(--glow);
     }
 
     button {
-      padding: 8px 14px;
+      position: relative;
+      isolation: isolate;
+      padding: 8px 13px;
       cursor: pointer;
+      border: 1px solid rgba(205, 148, 255, 0.28);
+      border-radius: 999px;
+      color: #f3e8ff;
+      background: rgba(255, 255, 255, 0.045);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, color 150ms ease;
+    }
+
+    button::after {
+      content: "";
+      position: absolute;
+      inset: 50%;
+      z-index: -1;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(236, 72, 153, 0.6), transparent 70%);
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(1);
+      transition: opacity 180ms ease, transform 280ms ease;
+      pointer-events: none;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: var(--border-strong);
+      background: rgba(168, 85, 247, 0.13);
+      box-shadow: 0 0 20px rgba(168, 85, 247, 0.18);
+    }
+
+    button:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 0 28px rgba(236, 72, 153, 0.32), 0 0 46px rgba(168, 85, 247, 0.22);
+    }
+
+    button:active::after {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(8);
     }
 
     button:disabled {
-      opacity: 0.5;
+      opacity: 0.42;
       cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
 
     .active {
-      background: black;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.74));
       color: white;
+      border-color: rgba(255, 255, 255, 0.28);
+      box-shadow: var(--glow);
     }
 
     #pdf-pages {
       width: 100%;
-      max-height: 80vh;
+      max-height: 76vh;
       overflow: auto;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      background: #525659;
-      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, rgba(12, 10, 24, 0.94), rgba(18, 14, 32, 0.94)),
+        radial-gradient(circle at top, rgba(168, 85, 247, 0.14), transparent 35%);
+      padding: 18px;
       box-sizing: border-box;
+      box-shadow: var(--shadow), inset 0 0 36px rgba(168, 85, 247, 0.05);
+      scrollbar-color: rgba(168, 85, 247, 0.7) rgba(255, 255, 255, 0.05);
     }
 
     .pdf-page {
       position: relative;
       display: block;
-      margin: 0 auto 16px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+      margin: 0 auto 18px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 18px 55px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
 
     .pdf-page canvas {
@@ -78,18 +394,22 @@
     }
 
     .status {
-      margin-bottom: 10px;
-      color: #444;
+      margin-bottom: 12px;
+      color: #d8c8f6;
+      font-size: 0.92rem;
+      min-height: 1.4em;
+      text-shadow: 0 0 14px rgba(168, 85, 247, 0.22);
     }
 
     .inquire-backdrop {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.35);
+      background: rgba(2, 1, 8, 0.68);
       z-index: 1000;
       align-items: center;
       justify-content: center;
+      backdrop-filter: blur(14px);
     }
 
     .inquire-backdrop.visible {
@@ -97,24 +417,31 @@
     }
 
     .inquire-panel {
-      background: #fff;
-      border-radius: 10px;
-      padding: 16px 18px;
-      max-width: 520px;
+      background:
+        linear-gradient(180deg, rgba(25, 19, 48, 0.98), rgba(11, 9, 24, 0.98)),
+        radial-gradient(circle at top left, rgba(168, 85, 247, 0.18), transparent 42%);
+      border: 1px solid var(--border-strong);
+      border-radius: 24px;
+      padding: 20px;
+      max-width: 560px;
       width: calc(100% - 32px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 26px 100px rgba(0, 0, 0, 0.65), var(--glow);
     }
 
     .inquire-panel h2 {
-      margin: 0 0 10px;
-      font-size: 1.1rem;
+      margin: 0 0 14px;
+      font-size: 1.35rem;
+      letter-spacing: -0.04em;
     }
 
     .inquire-panel label {
       display: block;
-      font-size: 0.85rem;
-      color: #555;
-      margin-bottom: 4px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #cdb7f6;
+      margin: 12px 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
 
     .inquire-panel textarea {
@@ -122,39 +449,74 @@
       box-sizing: border-box;
       font-family: inherit;
       font-size: 0.95rem;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
+      padding: 11px 12px;
+      color: var(--text);
+      border: 1px solid rgba(205, 148, 255, 0.24);
+      border-radius: 16px;
       resize: vertical;
+      background: rgba(5, 5, 16, 0.62);
+      outline: none;
+      transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+    }
+
+    .inquire-panel textarea:focus {
+      border-color: var(--border-strong);
+      background: rgba(8, 7, 20, 0.9);
+      box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.14), 0 0 24px rgba(168, 85, 247, 0.16);
     }
 
     .segment-preview {
-      max-height: 72px;
+      max-height: 76px;
       overflow: auto;
       margin-bottom: 10px;
-      font-size: 0.85rem;
-      color: #333;
-      background: #f5f5f5;
-      padding: 8px;
-      border-radius: 6px;
+      font-size: 0.86rem;
+      color: #e8dcff;
+      background: rgba(255, 255, 255, 0.055);
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
 
     .inquire-actions {
       display: flex;
       gap: 8px;
       justify-content: flex-end;
-      margin-top: 12px;
+      margin-top: 14px;
       flex-wrap: wrap;
     }
 
     #answerBox {
       min-height: 100px;
-      margin-top: 10px;
-      background: #fafafa;
+      margin-top: 0;
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    @media (max-width: 760px) {
+      .sidebar {
+        width: 235px;
+      }
+
+      .main-area {
+        padding: 26px 18px;
+      }
+
+      .controls {
+        border-radius: 18px;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Document library">
+      <div class="sidebar-head">
+        <span>Library</span>
+        <button type="button" id="addFolderBtn" title="Add folder">+</button>
+      </div>
+      <div id="folderList" class="folder-list-root"></div>
+    </aside>
+
+    <div class="main-area">
   <h1>PDF Simplifier</h1>
 
   <div class="controls">
@@ -167,6 +529,9 @@
   <div class="status" id="status">Upload a PDF to begin.</div>
 
   <div id="pdf-pages" aria-label="PDF pages"></div>
+
+    </div>
+  </div>
 
   <div class="inquire-backdrop" id="inquireBackdrop" role="dialog" aria-modal="true" aria-labelledby="inquireTitle">
     <div class="inquire-panel">
@@ -202,14 +567,341 @@
     const answerBox = document.getElementById("answerBox");
     const inquireCancel = document.getElementById("inquireCancel");
     const inquireSubmit = document.getElementById("inquireSubmit");
+    const addFolderBtn = document.getElementById("addFolderBtn");
+    const folderList = document.getElementById("folderList");
 
     const API_BASE = "http://127.0.0.1:8000";
+    const LS_LIBRARY_KEY = "pdfSimplifierLibraryV1";
+    const IDB_NAME = "pdfSimplifierIDB";
+    const IDB_STORE = "pdfBlobs";
+
+    let library = { folders: [], pdfs: [] };
+    let selectedFolderId = null;
+    let selectedPdfId = null;
 
     let originalPdfUrl = null;
     let simplifiedPdfUrl = null;
     let selectedFile = null;
     let currentView = "original";
     let highlightedSegment = "";
+
+    function newId() {
+      if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+      return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+
+    function loadLibrary() {
+      try {
+        const raw = localStorage.getItem(LS_LIBRARY_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        library.folders = Array.isArray(data.folders) ? data.folders : [];
+        library.pdfs = Array.isArray(data.pdfs) ? data.pdfs : [];
+        selectedFolderId = data.selectedFolderId || null;
+        selectedPdfId = data.selectedPdfId || null;
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    function saveLibrary() {
+      localStorage.setItem(
+        LS_LIBRARY_KEY,
+        JSON.stringify({
+          folders: library.folders,
+          pdfs: library.pdfs,
+          selectedFolderId,
+          selectedPdfId,
+        })
+      );
+    }
+
+    function openIdb() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbPutPdf(pdfId, originalBlob, simplifiedBlob) {
+      const db = await openIdb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, "readwrite");
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.objectStore(IDB_STORE).put(
+          { original: originalBlob, simplified: simplifiedBlob ?? null },
+          pdfId
+        );
+      });
+      db.close();
+    }
+
+    async function idbGetPdf(pdfId) {
+      const db = await openIdb();
+      const rec = await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, "readonly");
+        const rq = tx.objectStore(IDB_STORE).get(pdfId);
+        rq.onsuccess = () => resolve(rq.result);
+        rq.onerror = () => reject(rq.error);
+      });
+      db.close();
+      return rec || { original: null, simplified: null };
+    }
+
+    async function idbDeletePdf(pdfId) {
+      const db = await openIdb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, "readwrite");
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.objectStore(IDB_STORE).delete(pdfId);
+      });
+      db.close();
+    }
+
+    function ensureFolderForUpload() {
+      if (library.folders.length === 0) {
+        const id = newId();
+        library.folders.push({ id, name: "Documents" });
+        selectedFolderId = id;
+        saveLibrary();
+        return id;
+      }
+      if (!selectedFolderId || !library.folders.some((f) => f.id === selectedFolderId)) {
+        selectedFolderId = library.folders[0].id;
+      }
+      return selectedFolderId;
+    }
+
+    function revokeCurrentPdfUrls() {
+      if (originalPdfUrl) URL.revokeObjectURL(originalPdfUrl);
+      if (simplifiedPdfUrl) URL.revokeObjectURL(simplifiedPdfUrl);
+      originalPdfUrl = null;
+      simplifiedPdfUrl = null;
+    }
+
+    function folderPdfCount(folderId) {
+      return library.pdfs.filter((p) => p.folderId === folderId).length;
+    }
+
+    function deleteFolderFromLibrary(folderId) {
+      const folder = library.folders.find((f) => f.id === folderId);
+      if (!folder) return;
+      if (folderPdfCount(folderId) > 0) {
+        statusText.textContent = "Remove all PDFs from this folder before deleting it.";
+        return;
+      }
+      if (!confirm(`Delete empty folder "${folder.name}"?`)) return;
+
+      library.folders = library.folders.filter((f) => f.id !== folderId);
+      if (selectedFolderId === folderId) {
+        selectedFolderId = library.folders[0] ? library.folders[0].id : null;
+      }
+      saveLibrary();
+      renderSidebar();
+      statusText.textContent = `Folder "${folder.name}" removed.`;
+    }
+
+    function renderSidebar() {
+      folderList.innerHTML = "";
+      for (const folder of library.folders) {
+        const block = document.createElement("div");
+        block.className = "folder-block";
+        const row = document.createElement("div");
+        row.className =
+          "folder-row" + (folder.id === selectedFolderId ? " selected-folder" : "");
+        row.dataset.folderId = folder.id;
+        row.dataset.action = "select-folder";
+        const name = document.createElement("span");
+        name.className = "folder-name";
+        name.textContent = folder.name;
+        row.appendChild(name);
+        if (folderPdfCount(folder.id) === 0) {
+          const folderDel = document.createElement("button");
+          folderDel.type = "button";
+          folderDel.className = "folder-del";
+          folderDel.title = "Delete empty folder";
+          folderDel.dataset.action = "delete-folder";
+          folderDel.dataset.folderId = folder.id;
+          folderDel.textContent = "×";
+          row.appendChild(folderDel);
+        }
+        block.appendChild(row);
+
+        const ul = document.createElement("ul");
+        ul.className = "pdf-list";
+        for (const pdf of library.pdfs.filter((p) => p.folderId === folder.id)) {
+          const li = document.createElement("li");
+          li.dataset.pdfId = pdf.id;
+          li.dataset.action = "select-pdf";
+          if (pdf.id === selectedPdfId) li.classList.add("selected-pdf");
+          const title = document.createElement("span");
+          title.className = "pdf-title";
+          title.textContent = pdf.displayName;
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "pdf-del";
+          del.title = "Remove PDF";
+          del.dataset.action = "delete-pdf";
+          del.dataset.pdfId = pdf.id;
+          del.textContent = "×";
+          li.appendChild(title);
+          li.appendChild(del);
+          ul.appendChild(li);
+        }
+        block.appendChild(ul);
+        folderList.appendChild(block);
+      }
+    }
+
+    async function selectPdfFromLibrary(pdfId) {
+      const pdf = library.pdfs.find((p) => p.id === pdfId);
+      if (!pdf) return;
+      selectedPdfId = pdfId;
+      saveLibrary();
+
+      const blobs = await idbGetPdf(pdfId);
+      if (!blobs || !blobs.original) {
+        statusText.textContent = "PDF data missing; upload again.";
+        renderSidebar();
+        return;
+      }
+
+      revokeCurrentPdfUrls();
+      const origBlob =
+        blobs.original instanceof Blob
+          ? blobs.original
+          : new Blob([blobs.original], { type: "application/pdf" });
+      originalPdfUrl = URL.createObjectURL(origBlob);
+      if (blobs.simplified) {
+        const simBlob =
+          blobs.simplified instanceof Blob
+            ? blobs.simplified
+            : new Blob([blobs.simplified], { type: "application/pdf" });
+        simplifiedPdfUrl = URL.createObjectURL(simBlob);
+        showSimplifiedBtn.disabled = false;
+      } else {
+        simplifiedPdfUrl = null;
+        showSimplifiedBtn.disabled = true;
+      }
+
+      const buf = await origBlob.arrayBuffer();
+      selectedFile = new File([buf], pdf.displayName, { type: "application/pdf" });
+      pdfInput.value = "";
+
+      currentView = simplifiedPdfUrl ? "simplified" : "original";
+      if (currentView === "simplified") {
+        showPdf(simplifiedPdfUrl);
+        setActiveButton(showSimplifiedBtn);
+      } else {
+        showPdf(originalPdfUrl);
+        setActiveButton(showOriginalBtn);
+      }
+      renderSidebar();
+    }
+
+    async function deletePdfFromLibrary(pdfId) {
+      const pdf = library.pdfs.find((p) => p.id === pdfId);
+      if (!pdf) return;
+      if (
+        !confirm(
+          `Delete "${pdf.displayName}" from the library? This removes local copies and server-side unparsed/parsed text (and matching Chroma chunks) when applicable.`
+        )
+      ) {
+        return;
+      }
+
+      if (pdf.storedStem) {
+        try {
+          await fetch(
+            `${API_BASE}/library-document/${encodeURIComponent(pdf.storedStem)}`,
+            { method: "DELETE" }
+          );
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      await idbDeletePdf(pdfId);
+      library.pdfs = library.pdfs.filter((p) => p.id !== pdfId);
+      if (selectedPdfId === pdfId) {
+        selectedPdfId = null;
+        revokeCurrentPdfUrls();
+        selectedFile = null;
+        pdfPages.innerHTML = "";
+        showSimplifiedBtn.disabled = true;
+        statusText.textContent = "PDF removed.";
+        setActiveButton(showOriginalBtn);
+      }
+      saveLibrary();
+      renderSidebar();
+    }
+
+    folderList.addEventListener("click", async (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+
+      const delBtn = t.closest("[data-action='delete-pdf']");
+      if (delBtn) {
+        e.stopPropagation();
+        const pdfId = delBtn.getAttribute("data-pdf-id");
+        if (pdfId) await deletePdfFromLibrary(pdfId);
+        return;
+      }
+
+      const folderDelBtn = t.closest("[data-action='delete-folder']");
+      if (folderDelBtn) {
+        e.stopPropagation();
+        const folderId = folderDelBtn.getAttribute("data-folder-id");
+        if (folderId) deleteFolderFromLibrary(folderId);
+        return;
+      }
+
+      const pdfLi = t.closest("[data-action='select-pdf']");
+      if (pdfLi) {
+        const pdfId = pdfLi.getAttribute("data-pdf-id");
+        if (pdfId) await selectPdfFromLibrary(pdfId);
+        return;
+      }
+
+      const folderRow = t.closest("[data-action='select-folder']");
+      if (folderRow) {
+        selectedFolderId = folderRow.getAttribute("data-folder-id");
+        saveLibrary();
+        renderSidebar();
+      }
+    });
+
+    addFolderBtn.addEventListener("click", () => {
+      const name = window.prompt("Folder name (e.g. Math, English):", "").trim();
+      if (!name) return;
+      const id = newId();
+      library.folders.push({ id, name });
+      selectedFolderId = id;
+      saveLibrary();
+      renderSidebar();
+    });
+
+    loadLibrary();
+    if (selectedPdfId && !library.pdfs.some((p) => p.id === selectedPdfId)) {
+      selectedPdfId = null;
+    }
+    if (selectedFolderId && !library.folders.some((f) => f.id === selectedFolderId)) {
+      selectedFolderId = library.folders[0] ? library.folders[0].id : null;
+    }
+    saveLibrary();
+    renderSidebar();
+    if (selectedPdfId) {
+      selectPdfFromLibrary(selectedPdfId).catch((err) => console.error(err));
+    }
 
     function renderTextLayerFallback(textContent, container, viewport) {
       const items = textContent.items;
@@ -312,9 +1004,31 @@
       highlightedSegment = "";
     }
 
-    pdfInput.addEventListener("change", () => {
+    pdfInput.addEventListener("change", async () => {
       const file = pdfInput.files[0];
       if (!file) return;
+
+      const folderId = ensureFolderForUpload();
+      const pdfId = newId();
+      library.pdfs.push({
+        id: pdfId,
+        folderId,
+        displayName: file.name,
+        storedStem: null,
+      });
+      selectedPdfId = pdfId;
+      saveLibrary();
+
+      try {
+        await idbPutPdf(pdfId, file, null);
+      } catch (err) {
+        console.error(err);
+        library.pdfs = library.pdfs.filter((p) => p.id !== pdfId);
+        saveLibrary();
+        statusText.textContent = "Could not save PDF locally (IndexedDB).";
+        renderSidebar();
+        return;
+      }
 
       selectedFile = file;
 
@@ -327,7 +1041,9 @@
       currentView = "original";
       showPdf(originalPdfUrl);
       setActiveButton(showOriginalBtn);
-      statusText.textContent = "Original PDF loaded.";
+      const folderName = library.folders.find((f) => f.id === folderId)?.name || "folder";
+      statusText.textContent = `Original PDF loaded under "${folderName}".`;
+      renderSidebar();
     });
 
     showOriginalBtn.addEventListener("click", () => {
@@ -419,6 +1135,7 @@
         return;
       }
 
+      const targetPdfId = selectedPdfId;
       statusText.textContent = "Uploading and simplifying…";
 
       const formData = new FormData();
@@ -434,6 +1151,7 @@
           throw new Error("Failed to simplify PDF.");
         }
 
+        const stem = response.headers.get("X-Stored-Stem");
         const blob = await response.blob();
 
         if (simplifiedPdfUrl) URL.revokeObjectURL(simplifiedPdfUrl);
@@ -444,6 +1162,30 @@
         showPdf(simplifiedPdfUrl);
         setActiveButton(showSimplifiedBtn);
         statusText.textContent = "Simplified PDF ready.";
+
+        if (targetPdfId && stem) {
+          const entry = library.pdfs.find((p) => p.id === targetPdfId);
+          if (entry) {
+            entry.storedStem = stem;
+            saveLibrary();
+          }
+        }
+
+        if (targetPdfId) {
+          const fromIdb = await idbGetPdf(targetPdfId);
+          const origBlob = fromIdb && fromIdb.original;
+          if (origBlob) {
+            await idbPutPdf(
+              targetPdfId,
+              origBlob instanceof Blob ? origBlob : new Blob([origBlob], { type: "application/pdf" }),
+              blob
+            );
+          } else {
+            await idbPutPdf(targetPdfId, selectedFile, blob);
+          }
+        }
+
+        renderSidebar();
       } catch (error) {
         console.error(error);
         statusText.textContent = "Error simplifying PDF.";

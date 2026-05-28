@@ -32,7 +32,7 @@ def _response_text(response) -> str:
         return response.content
     return str(response)
 
-
+#find relevant context in the DB
 def _query_with_segment(question: str, segment: str) -> str:
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
