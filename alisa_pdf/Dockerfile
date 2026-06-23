@@ -18,12 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # API and PDF pipeline live here; api.py resolves alisa_v2 as /app/../alisa_v2
-COPY alisa_pdf/requirements.txt /tmp/requirements-alisa_pdf.txt
-COPY alisa_v2/requirements.txt /tmp/requirements-alisa_v2.txt
-RUN pip install --no-cache-dir \
-    -r /tmp/requirements-alisa_pdf.txt \
-    -r /tmp/requirements-alisa_v2.txt \
-    && pip install --no-cache-dir langchain-chroma
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY alisa_pdf/ /app/
 COPY alisa_v2/ /alisa_v2/

@@ -46,7 +46,7 @@ Or if nothing was detected:
 { "text": "", "error": "No text detected in image" }
 ```
 
-Uses `pytesseract.image_to_string()` on the uploaded image. Requires `pytesseract` and `Pillow` in `requirements.txt`.
+Uses `pytesseract.image_to_string()` on the uploaded image. Requires `pytesseract` and `Pillow` (see repo root `requirements.txt`).
 
 ---
 

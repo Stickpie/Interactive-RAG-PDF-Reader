@@ -1,12 +1,28 @@
-# Chroma is provided via langchain-community (same as viewChroma.py).
-# Optional: you can use `langchain-chroma` instead and import from `langchain_chroma`.
+# FastAPI backend (alisa_pdf)
+fastapi
+uvicorn[standard]
+python-multipart
+transformers
+torch
+unstructured[local-inference]
+python-magic
+Pillow
+reportlab
+rouge-score
+textstat
+tabulate
+
+# RAG pipeline (alisa_v2)
 langchain==1.2.13
 langchain-community>=0.3.0
+langchain-chroma
 chromadb>=0.5.0
 langchain-core>=0.3.0
 langchain-text-splitters>=0.3.0
 langchain-ollama>=0.2.0
 python-dotenv>=1.0.0
+
+# Shared PDF / OCR utilities
 pytesseract>=0.3.10
 pi-heif>=1.0.0
 unstructured-inference>=1.0.0
