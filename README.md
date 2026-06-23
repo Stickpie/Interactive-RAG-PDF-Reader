@@ -155,8 +155,7 @@ The app is intended for **local development only** for now. Deployment to a home
 From the **repository root**:
 
 ```bash
-pip install -r alisa_pdf/requirements.txt
-pip install -r alisa_v2/requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 2. Start Ollama
@@ -207,17 +206,16 @@ Then visit [http://127.0.0.1:5500](http://127.0.0.1:5500) and confirm `API_BASE`
 ├── alisa_pdf/
 │   ├── api.py              # FastAPI app
 │   ├── simplify.py         # BART simplification
-│   ├── remakePDF.py        # Rebuild PDF from simplified elements
-│   └── requirements.txt
-└── alisa_v2/
-    ├── parse_text.py       # PDF → ParsedText/*.txt
-    ├── populate_chroma.py  # Chunk + embed into Chroma
-    ├── query_data.py       # RAG inquire (Ollama + Chroma)
-    ├── get_embedding_function.py
-    ├── UnparsedText/       # Stored uploads ({stem}.pdf)
-    ├── ParsedText/         # Extracted text per stem
-    ├── chroma_db/          # Vector store (generated)
-    └── requirements.txt
+│   └── remakePDF.py        # Rebuild PDF from simplified elements
+├── alisa_v2/
+│   ├── parse_text.py       # PDF → ParsedText/*.txt
+│   ├── populate_chroma.py  # Chunk + embed into Chroma
+│   ├── query_data.py       # RAG inquire (Ollama + Chroma)
+│   ├── get_embedding_function.py
+│   ├── UnparsedText/       # Stored uploads ({stem}.pdf)
+│   ├── ParsedText/         # Extracted text per stem
+│   └── chroma_db/          # Vector store (generated)
+└── requirements.txt        # Python deps for alisa_pdf + alisa_v2
 ```
 
 ---
