@@ -141,14 +141,10 @@ The app is intended for **local development only** for now. Deployment to a home
 
 ### Prerequisites
 
-- **Python 3.10+**
-- **Ollama** with models:
-  ```bash
-  ollama pull nomic-embed-text
-  ollama pull qwen2.5:7b-instruct
-  ```
-- **Tesseract** (optional; used if you extend OCR flows) — install system `tesseract` if using `pytesseract`.
-- Enough disk/RAM for the BART model and Chroma index.
+Before installing the Python dependencies, install the required system packages:
+
+sudo apt update
+sudo apt install -y python3-venv python3-pip tesseract-ocr poppler-utils libgl1 libglib2.0-0
 
 ### 1. Install dependencies
 
@@ -158,9 +154,27 @@ From the **repository root**:
 pip install -r requirements.txt
 ```
 
-### 2. Start Ollama
+### 2. Ollama Setup
 
-Ensure the Ollama daemon is running (e.g. Ollama desktop app or `ollama serve`).
+Install Ollama:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Enable the service:
+
+```bash
+sudo systemctl enable ollama
+sudo systemctl start ollama
+```
+
+Download the required models:
+
+```bash
+ollama pull nomic-embed-text
+ollama pull qwen2.5:7b-instruct
+```
 
 ### 3. Start the API
 
@@ -170,7 +184,7 @@ From the **repository root**:
 uvicorn api:app --app-dir alisa_pdf --reload
 ```
 
-Default URL: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+Default URL: Change API_BASE in index.html as needed
 
 The first PDF simplification may take extra time while the Hugging Face model downloads.
 
@@ -185,8 +199,6 @@ If the browser blocks requests from `file://` to `http://127.0.0.1:8000`, serve 
 cd alisa_frontend_demo
 python -m http.server 5500
 ```
-
-Then visit [http://127.0.0.1:5500](http://127.0.0.1:5500) and confirm `API_BASE` in `index.html` still points to `http://127.0.0.1:8000`.
 
 ### 5. Typical workflow
 
