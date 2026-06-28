@@ -7,7 +7,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import KeepTogether
 from simplify import simplify_text_chunked
-
+from xml.sax.saxutils import escape
 
 def export_to_pdf(elements, output_path="simplified_output.pdf"):
     """
@@ -62,7 +62,9 @@ def export_to_pdf(elements, output_path="simplified_output.pdf"):
             elif hasattr(e, "text") and e.text:
                 simplified = simplify_text_chunked(e.text)
 
-                para = Paragraph(simplified, simplified_style)
+                safe_simplified = escape(str(simplified)).replace("\n", "<br/>")
+
+                para = Paragraph(safe_simplified, simplified_style)
                 page_content.append(para)
                 page_content.append(Spacer(1, 0.2 * inch))
 
