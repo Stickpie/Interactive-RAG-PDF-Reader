@@ -19,7 +19,7 @@ from PIL import Image
 from simplify import normalize_pdf, simplify_text_chunked
 from remakePDF import export_to_pdf
 
-app = FastAPI()
+app = FastAPI(root_path="/api")
 
 app.add_middleware(
     CORSMiddleware,
