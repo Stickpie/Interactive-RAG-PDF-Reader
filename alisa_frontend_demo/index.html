@@ -260,6 +260,11 @@
       backdrop-filter: blur(18px);
     }
 
+    .view-toggle-group {
+      display: flex;
+      gap: 8px;
+    }
+
     input[type="file"] {
       max-width: 310px;
       color: var(--muted);
@@ -491,24 +496,262 @@
       background: rgba(255, 255, 255, 0.045);
     }
 
-    @media (max-width: 760px) {
+    .mobile-header {
+      display: none;
+    }
+
+    .sidebar-backdrop {
+      display: none;
+    }
+
+  /* Tablet */
+    @media (max-width: 1024px) {
       .sidebar {
-        width: 235px;
+        width: 250px;
       }
 
       .main-area {
-        padding: 26px 18px;
+        padding: 28px 22px;
+        max-width: none;
+      }
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      .mobile-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        padding-top: max(12px, env(safe-area-inset-top));
+        border-bottom: 1px solid var(--border);
+        background: rgba(12, 10, 24, 0.92);
+        backdrop-filter: blur(18px);
+        position: sticky;
+        top: 0;
+        z-index: 200;
+      }
+
+      .mobile-title {
+        font-weight: 800;
+        font-size: 1rem;
+        letter-spacing: -0.03em;
+        background: linear-gradient(120deg, #fff, #e9d5ff 42%, #c084fc);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .sidebar-toggle {
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .hamburger {
+        display: block;
+        width: 18px;
+        height: 2px;
+        background: #f3e8ff;
+        position: relative;
+        border-radius: 2px;
+      }
+
+      .hamburger::before,
+      .hamburger::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        width: 18px;
+        height: 2px;
+        background: #f3e8ff;
+        border-radius: 2px;
+        transition: transform 180ms ease, top 180ms ease;
+      }
+
+      .hamburger::before {
+        top: -6px;
+      }
+
+      .hamburger::after {
+        top: 6px;
+      }
+
+      body.sidebar-open .hamburger {
+        background: transparent;
+      }
+
+      body.sidebar-open .hamburger::before {
+        top: 0;
+        transform: rotate(45deg);
+      }
+
+      body.sidebar-open .hamburger::after {
+        top: 0;
+        transform: rotate(-45deg);
+      }
+
+      .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 1, 8, 0.62);
+        z-index: 299;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms ease;
+        backdrop-filter: blur(4px);
+      }
+
+      body.sidebar-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .app-shell {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(88vw, 300px);
+        z-index: 300;
+        transform: translateX(-105%);
+        transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+        border-right: 1px solid var(--border-strong);
+        padding-top: max(18px, env(safe-area-inset-top));
+        padding-bottom: max(18px, env(safe-area-inset-bottom));
+      }
+
+      body.sidebar-open .sidebar {
+        transform: translateX(0);
+      }
+
+      .main-area {
+        padding: 20px 14px;
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+        width: 100%;
+      }
+
+      h1 {
+        font-size: 1.75rem;
+        margin-bottom: 16px;
+      }
+
+      .main-area h1 {
+        display: none;
       }
 
       .controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 14px;
         border-radius: 18px;
+      }
+
+      input[type="file"] {
+        max-width: 100%;
+        width: 100%;
+      }
+
+      input[type="file"]::file-selector-button {
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 8px;
+        padding: 12px 14px;
+      }
+
+      .controls button {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 0.92rem;
+      }
+
+      .controls .view-toggle-group {
+        display: flex;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .controls .view-toggle-group button {
+        flex: 1;
+      }
+
+      #pdf-pages {
+        max-height: calc(100vh - 280px);
+        min-height: 240px;
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      .pdf-page {
+        max-width: 100%;
+        margin-bottom: 14px;
+      }
+
+      .pdf-page canvas {
+        width: 100%;
+        height: auto;
+      }
+
+      .inquire-panel {
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        padding: 18px;
+        border-radius: 20px;
+      }
+
+      .inquire-panel h2 {
+        font-size: 1.2rem;
+      }
+
+      .inquire-actions button {
+        flex: 1;
+        padding: 12px 16px;
+      }
+
+      .status {
+        font-size: 0.86rem;
+      }
+    }
+
+    /* Small phones */
+    @media (max-width: 380px) {
+      .main-area {
+        padding: 16px 12px;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      #pdf-pages {
+        max-height: calc(100vh - 300px);
       }
     }
   </style>
 </head>
 <body>
+  <header class="mobile-header">
+    <button type="button" id="sidebarToggle" class="sidebar-toggle" aria-label="Open library" aria-expanded="false">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <span class="mobile-title">PDF Simplifier</span>
+  </header>
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Document library">
+    <aside class="sidebar" id="sidebar" aria-label="Document library">
       <div class="sidebar-head">
         <span>Library</span>
         <button type="button" id="addFolderBtn" title="Add folder">+</button>
@@ -522,8 +765,10 @@
   <div class="controls">
     <input type="file" id="pdfInput" accept="application/pdf" />
     <button id="simplifyBtn">Simplify PDF</button>
-    <button id="showOriginalBtn" class="active">Original</button>
-    <button id="showSimplifiedBtn" disabled>Simplified</button>
+    <div class="view-toggle-group">
+      <button id="showOriginalBtn" class="active">Original</button>
+      <button id="showSimplifiedBtn" disabled>Simplified</button>
+    </div>
   </div>
 
   <div class="status" id="status">Upload a PDF to begin.</div>
@@ -569,6 +814,8 @@
     const inquireSubmit = document.getElementById("inquireSubmit");
     const addFolderBtn = document.getElementById("addFolderBtn");
     const folderList = document.getElementById("folderList");
+    const sidebarToggle = document.getElementById("sidebarToggle");
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
     const API_BASE = "/api";
     const LS_LIBRARY_KEY = "pdfSimplifierLibraryV1";
@@ -584,6 +831,59 @@
     let selectedFile = null;
     let currentView = "original";
     let highlightedSegment = "";
+    let lastRenderedUrl = null;
+    let resizeTimer = null;
+
+    const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
+    const TABLET_MQ = window.matchMedia("(max-width: 1024px)");
+
+    function isMobileViewport() {
+      return MOBILE_MQ.matches;
+    }
+
+    function isTabletViewport() {
+      return TABLET_MQ.matches && !MOBILE_MQ.matches;
+    }
+
+    function updateDeviceClass() {
+      document.body.classList.remove("is-mobile", "is-tablet", "is-desktop");
+      if (MOBILE_MQ.matches) {
+        document.body.classList.add("is-mobile");
+      } else if (TABLET_MQ.matches) {
+        document.body.classList.add("is-tablet");
+      } else {
+        document.body.classList.add("is-desktop");
+      }
+    }
+
+    function openSidebar() {
+      document.body.classList.add("sidebar-open");
+      sidebarToggle.setAttribute("aria-expanded", "true");
+      sidebarBackdrop.setAttribute("aria-hidden", "false");
+    }
+
+    function closeSidebar() {
+      document.body.classList.remove("sidebar-open");
+      sidebarToggle.setAttribute("aria-expanded", "false");
+      sidebarBackdrop.setAttribute("aria-hidden", "true");
+    }
+
+    function toggleSidebar() {
+      if (document.body.classList.contains("sidebar-open")) {
+        closeSidebar();
+      } else {
+        openSidebar();
+      }
+    }
+
+    function getPdfRenderScale(page) {
+      const viewportAt1 = page.getViewport({ scale: 1 });
+      const horizontalPadding = isMobileViewport() ? 24 : 36;
+      const maxWidth = pdfPages.clientWidth - horizontalPadding;
+      const desktopScale = isTabletViewport() ? 1.1 : 1.25;
+      const fitScale = maxWidth / viewportAt1.width;
+      return Math.min(desktopScale, fitScale);
+    }
 
     function newId() {
       if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -806,6 +1106,7 @@
         setActiveButton(showOriginalBtn);
       }
       renderSidebar();
+      if (isMobileViewport()) closeSidebar();
     }
 
     async function deletePdfFromLibrary(pdfId) {
@@ -926,9 +1227,12 @@
         return;
       }
       pdfPages.innerHTML = "";
+      lastRenderedUrl = url;
       const loadingTask = pdfjsLib.getDocument(url);
       const pdf = await loadingTask.promise;
-      const scale = 1.25;
+
+      const firstPage = await pdf.getPage(1);
+      const scale = getPdfRenderScale(firstPage);
 
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
@@ -936,6 +1240,7 @@
         const wrap = document.createElement("div");
         wrap.className = "pdf-page";
         wrap.style.width = viewport.width + "px";
+        wrap.style.maxWidth = "100%";
 
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
@@ -1068,6 +1373,42 @@
       }
     });
 
+    pdfPages.addEventListener("touchend", () => {
+      setTimeout(() => {
+        const sel = window.getSelection();
+        const text = sel ? sel.toString().trim() : "";
+        if (text.length > 0) {
+          openInquire(text);
+        }
+      }, 50);
+    });
+
+    sidebarToggle.addEventListener("click", toggleSidebar);
+    sidebarBackdrop.addEventListener("click", closeSidebar);
+
+    function handleViewportChange() {
+      updateDeviceClass();
+      if (!isMobileViewport()) {
+        closeSidebar();
+      }
+      if (lastRenderedUrl) {
+        const url =
+          currentView === "simplified" && simplifiedPdfUrl
+            ? simplifiedPdfUrl
+            : originalPdfUrl;
+        if (url) showPdf(url);
+      }
+    }
+
+    MOBILE_MQ.addEventListener("change", handleViewportChange);
+    TABLET_MQ.addEventListener("change", handleViewportChange);
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(handleViewportChange, 200);
+    });
+
+    updateDeviceClass();
+
     inquireCancel.addEventListener("click", closeInquire);
 
     inquireBackdrop.addEventListener("click", (e) => {
@@ -1075,8 +1416,12 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && inquireBackdrop.classList.contains("visible")) {
-        closeInquire();
+      if (e.key === "Escape") {
+        if (inquireBackdrop.classList.contains("visible")) {
+          closeInquire();
+        } else if (isMobileViewport() && document.body.classList.contains("sidebar-open")) {
+          closeSidebar();
+        }
       }
     });
 
