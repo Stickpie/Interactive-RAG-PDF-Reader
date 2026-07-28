@@ -2,8 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>PDF Simplifier</title>
+  <script>
+    (function () {
+      function detectMobileEnv() {
+        return (
+          window.matchMedia("(max-width: 768px)").matches ||
+          window.matchMedia("(max-device-width: 768px)").matches ||
+          (window.matchMedia("(hover: none) and (pointer: coarse)").matches &&
+            Math.min(window.screen.width, window.screen.height) <= 1024)
+        );
+      }
+      if (detectMobileEnv()) {
+        document.documentElement.classList.add("is-mobile-env");
+      }
+      window.__detectMobileEnv = detectMobileEnv;
+    })();
+  </script>
   <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <style>
     @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
@@ -550,8 +567,13 @@
       }
     }
 
-    /* Mobile */
-    @media (max-width: 768px) {
+    /* Mobile — layout width, physical screen, or touch device */
+    @media
+      (max-width: 768px),
+      (max-device-width: 768px),
+      ((hover: none) and (pointer: coarse) and (max-device-width: 1024px)),
+      (display-mode: standalone)
+    {
       body {
         font-size: 16px;
         padding-bottom: calc(76px + env(safe-area-inset-bottom));
@@ -982,7 +1004,10 @@
     }
 
     /* Small phones */
-    @media (max-width: 380px) {
+    @media
+      (max-width: 380px),
+      (max-device-width: 380px)
+    {
       .view-segment button {
         font-size: 0.88rem;
         padding: 10px 8px;
@@ -1107,20 +1132,31 @@
     let lastRenderedUrl = null;
     let resizeTimer = null;
 
-    const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
+    const MOBILE_LAYOUT_MQ = window.matchMedia("(max-width: 768px)");
+    const MOBILE_DEVICE_MQ = window.matchMedia("(max-device-width: 768px)");
+    const TOUCH_MQ = window.matchMedia("(hover: none) and (pointer: coarse)");
     const TABLET_MQ = window.matchMedia("(max-width: 1024px)");
 
     function isMobileViewport() {
-      return MOBILE_MQ.matches;
+      if (typeof window.__detectMobileEnv === "function") {
+        return window.__detectMobileEnv();
+      }
+      return (
+        MOBILE_LAYOUT_MQ.matches ||
+        MOBILE_DEVICE_MQ.matches ||
+        (TOUCH_MQ.matches && Math.min(window.screen.width, window.screen.height) <= 1024)
+      );
     }
 
     function isTabletViewport() {
-      return TABLET_MQ.matches && !MOBILE_MQ.matches;
+      return TABLET_MQ.matches && !isMobileViewport();
     }
 
     function updateDeviceClass() {
+      const mobile = isMobileViewport();
+      document.documentElement.classList.toggle("is-mobile-env", mobile);
       document.body.classList.remove("is-mobile", "is-tablet", "is-desktop");
-      if (MOBILE_MQ.matches) {
+      if (mobile) {
         document.body.classList.add("is-mobile");
       } else if (TABLET_MQ.matches) {
         document.body.classList.add("is-tablet");
@@ -1687,7 +1723,9 @@
       }
     }
 
-    MOBILE_MQ.addEventListener("change", handleViewportChange);
+    MOBILE_LAYOUT_MQ.addEventListener("change", handleViewportChange);
+    MOBILE_DEVICE_MQ.addEventListener("change", handleViewportChange);
+    TOUCH_MQ.addEventListener("change", handleViewportChange);
     TABLET_MQ.addEventListener("change", handleViewportChange);
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
