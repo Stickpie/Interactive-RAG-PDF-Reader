@@ -42,6 +42,11 @@ UNPARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "UnparsedText"))
 PARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "ParsedText"))
 CHROMA_PATH = os.path.abspath(os.path.join(ALISA_V2, "chroma_db"))
 INQUIRE_STATE_PATH = os.path.join(ALISA_V2, "inquire_state.json")
+EXAMPLE_PDF_CANDIDATES = [
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "ExamplePDF.pdf")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "alisa_frontend_demo", "ExamplePDF.pdf")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "ExamplePDF.pdf")),
+]
 
 # Stored PDF basename without extension: 32-hex uuid + underscore + original name (no path chars).
 STORED_STEM_RE = re.compile(r"^[a-f0-9]{32}_[^\\/:*?\"<>|]+$", re.IGNORECASE)
@@ -64,9 +69,28 @@ def _stored_upload_path(original_filename: str) -> str:
     return os.path.join(UNPARSED_DIR, safe)
 
 
+def _resolve_example_pdf_path() -> str | None:
+    for path in EXAMPLE_PDF_CANDIDATES:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
 @app.get("/")
 async def root():
     return {"message": "API is running. Open /docs to test PDF upload."}
+
+
+@app.get("/example-pdf")
+async def get_example_pdf():
+    path = _resolve_example_pdf_path()
+    if not path:
+        raise HTTPException(status_code=404, detail="ExamplePDF.pdf not found on server.")
+    return FileResponse(
+        path=path,
+        media_type="application/pdf",
+        filename="ExamplePDF.pdf",
+    )
 
 def cleanup_files(*paths):
     for path in paths:
