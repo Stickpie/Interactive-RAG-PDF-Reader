@@ -1,21 +1,23 @@
-from transformers import BartForConditionalGeneration, BartTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import torch
-from unstructured.documents.elements import NarrativeText, Title, Text
+from unstructured.partition.pdf import partition_pdf
+
+MODEL_ID = "Stickpie/inkling-flan-t5-simplifier"
 
 # Load model and tokenizer
-model = BartForConditionalGeneration.from_pretrained("elvisbakunzi/dyslexia-friendly-text-simplifier")
-tokenizer = BartTokenizer.from_pretrained("elvisbakunzi/dyslexia-friendly-text-simplifier")
+simplification_model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_ID)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 
 # Auto-detect device (MPS for Apple Silicon, CUDA for GPU, CPU fallback)
-device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-model.to(device)
-model.eval()
-
-import pytesseract
-from unstructured.partition.html import partition_html
-from unstructured.partition.pptx import partition_pptx
-from unstructured.partition.pdf import partition_pdf
-from unstructured.partition.auto import partition
+DEVICE = (
+    torch.device("mps")
+    if torch.backends.mps.is_available()
+    else torch.device("cuda")
+    if torch.cuda.is_available()
+    else torch.device("cpu")
+)
+simplification_model.to(DEVICE)
+simplification_model.eval()
 
 
 def normalize_pdf(filename: str, max_characters: int = 256):
@@ -28,40 +30,43 @@ def normalize_pdf(filename: str, max_characters: int = 256):
     return elements
 
 
-def simplify_text(text, max_length=256):
+def simplify_text(text: str) -> str:
     # Basic cleanup to avoid degenerate behavior on whitespace-only inputs
     text = text.strip()
     if not text:
         return ""
 
-    inputs = tokenizer(text, max_length=512, truncation=True, return_tensors='pt').to(device)
+    inputs = tokenizer(
+        "simplify: " + text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+    ).to(DEVICE)
 
-    with torch.no_grad():
-        outputs = model.generate(
+    with torch.inference_mode():
+        output_ids = simplification_model.generate(
             **inputs,
-            max_length=max_length,
+            max_new_tokens=128,
             num_beams=4,
-            length_penalty=0.8,
             early_stopping=True,
-            no_repeat_ngram_size=2,
-            do_sample=True,
-            top_p=0.9,
-            temperature=0.7,
         )
 
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return tokenizer.decode(
+        output_ids[0],
+        skip_special_tokens=True,
+    )
 
 
-def simplify_text_chunked(text, max_length=256):
+def simplify_text_chunked(text: str) -> str:
     """
     Split text into paragraphs, simplify each independently, then rejoin.
-    Avoids truncation when the full text would exceed the BART input limit.
+    Avoids truncation when the full text would exceed the tokenizer input limit.
     """
     paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
     if not paragraphs:
         return text
 
-    simplified_paragraphs = [simplify_text(p, max_length=max_length) for p in paragraphs]
+    simplified_paragraphs = [simplify_text(p) for p in paragraphs]
     return "\n\n".join(simplified_paragraphs)
 
 
