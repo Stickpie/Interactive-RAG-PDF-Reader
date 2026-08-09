@@ -1123,6 +1123,9 @@
 
     const API_BASE = "/api";
     const LS_LIBRARY_KEY = "pdfSimplifierLibraryV1";
+    const LS_EXAMPLE_SEEDED_KEY = "pdfSimplifierExampleSeededV1";
+    const EXAMPLE_PDF_URL = "ExamplePDF.pdf";
+    const EXAMPLE_PDF_NAME = "ExamplePDF.pdf";
     const IDB_NAME = "pdfSimplifierIDB";
     const IDB_STORE = "pdfBlobs";
 
@@ -1509,6 +1512,53 @@
       renderSidebar();
     });
 
+    async function seedExamplePdfIfNeeded() {
+      if (localStorage.getItem(LS_EXAMPLE_SEEDED_KEY) === "1") return false;
+      if (library.pdfs.length > 0) {
+        localStorage.setItem(LS_EXAMPLE_SEEDED_KEY, "1");
+        return false;
+      }
+
+      try {
+        statusText.textContent = "Loading example PDF…";
+        const response = await fetch(EXAMPLE_PDF_URL);
+        if (!response.ok) {
+          throw new Error(`Example PDF fetch failed (${response.status})`);
+        }
+        const blob = await response.blob();
+        const file = new File([blob], EXAMPLE_PDF_NAME, { type: "application/pdf" });
+
+        const folderId = ensureFolderForUpload();
+        const pdfId = newId();
+        library.pdfs.push({
+          id: pdfId,
+          folderId,
+          displayName: EXAMPLE_PDF_NAME,
+          storedStem: null,
+        });
+        selectedPdfId = pdfId;
+        saveLibrary();
+        await idbPutPdf(pdfId, file, null);
+        localStorage.setItem(LS_EXAMPLE_SEEDED_KEY, "1");
+
+        selectedFile = file;
+        if (originalPdfUrl) URL.revokeObjectURL(originalPdfUrl);
+        originalPdfUrl = URL.createObjectURL(file);
+        simplifiedPdfUrl = null;
+        showSimplifiedBtn.disabled = true;
+        currentView = "original";
+        showPdf(originalPdfUrl);
+        setActiveButton(showOriginalBtn);
+        statusText.textContent = "Example PDF loaded.";
+        renderSidebar();
+        return true;
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "Could not load example PDF.";
+        return false;
+      }
+    }
+
     loadLibrary();
     if (selectedPdfId && !library.pdfs.some((p) => p.id === selectedPdfId)) {
       selectedPdfId = null;
@@ -1518,9 +1568,13 @@
     }
     saveLibrary();
     renderSidebar();
-    if (selectedPdfId) {
-      selectPdfFromLibrary(selectedPdfId).catch((err) => console.error(err));
-    }
+    seedExamplePdfIfNeeded()
+      .then((seeded) => {
+        if (!seeded && selectedPdfId) {
+          return selectPdfFromLibrary(selectedPdfId);
+        }
+      })
+      .catch((err) => console.error(err));
 
     function renderTextLayerFallback(textContent, container, viewport) {
       const items = textContent.items;
