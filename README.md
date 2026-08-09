@@ -9,7 +9,7 @@ The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAP
 ## What the application does
 
 1. **Upload and organize PDFs** — Users upload PDFs into named folders. The sidebar library survives page reloads.
-2. **Simplify PDFs** — The backend extracts text from each page, runs it through a Hugging Face BART model tuned for dyslexia-friendly simplification, and returns a new PDF with simplified wording while preserving layout where possible.
+2. **Simplify PDFs** — The backend extracts text from each page, runs it through a Hugging Face Flan-T5 model tuned for text simplification, and returns a new PDF with simplified wording while preserving layout where possible.
 3. **View original vs. simplified** — PDF.js renders either version in the main viewer; users can switch between them.
 4. **Ask about a passage (Inquire)** — Users select text in the viewer, ask a question, and receive an answer grounded in the document via ChromaDB + Ollama.
 5. **Delete documents** — Removing a PDF from the library clears local blobs and, when linked, deletes the server copy plus matching Chroma chunks.
@@ -79,7 +79,7 @@ The frontend talks to the API at `http://127.0.0.1:8000` (see `API_BASE` in `ind
      │                              │
      │                              ▼
      │                         Hugging Face BART
-     │                         elvisbakunzi/dyslexia-friendly-text-simplifier
+     │                         Stickpie/inkling-flan-t5-simplifier
      │                              │
      │                              ▼
      │                         remakePDF → simplified PDF bytes
@@ -102,8 +102,8 @@ The frontend talks to the API at `http://127.0.0.1:8000` (see `API_BASE` in `ind
 
 ### Hugging Face — dyslexia simplification
 
-- **Model:** [`elvisbakunzi/dyslexia-friendly-text-simplifier`](https://huggingface.co/elvisbakunzi/dyslexia-friendly-text-simplifier) (BART).
-- **Code:** `alisa_pdf/simplify.py` — `simplify_text_chunked()` splits text by paragraph so each BART call stays within the tokenizer limit, then joins results.
+- **Model:** [`Stickpie/inkling-flan-t5-simplifier`](https://huggingface.co/Stickpie/inkling-flan-t5-simplifier) (Flan-T5).
+- **Code:** `alisa_pdf/simplify.py` — `simplify_text_chunked()` splits text by paragraph so each model call stays within the tokenizer limit, then joins results. Prefixes inputs with `simplify:`.
 - **Device:** Auto-selects MPS (Apple Silicon) → CUDA → CPU.
 - **First run:** Weights download from Hugging Face (~533 MB). A Hugging Face token can improve download speed.
 
@@ -214,7 +214,7 @@ python -m http.server 5500
 │   └── index.html          # SPA: library UI, PDF.js, inquire modal
 ├── alisa_pdf/
 │   ├── api.py              # FastAPI app
-│   ├── simplify.py         # BART simplification
+│   ├── simplify.py         # Flan-T5 simplification
 │   └── remakePDF.py        # Rebuild PDF from simplified elements
 ├── alisa_v2/
 │   ├── parse_text.py       # PDF → ParsedText/*.txt
