@@ -1384,14 +1384,28 @@
     }
 
     async function fetchExamplePdfBlob() {
-      const response = await fetch(EXAMPLE_PDF_URL);
-      if (!response.ok) {
-        throw new Error(`Example PDF fetch failed (${response.status})`);
+      const urls = [`${API_BASE}/example-pdf`, EXAMPLE_PDF_URL];
+      let lastError = null;
+
+      for (const url of urls) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            lastError = new Error(`Example PDF fetch failed (${response.status}) at ${url}`);
+            continue;
+          }
+          const blob = await response.blob();
+          if (!blob || blob.size < 100) {
+            lastError = new Error(`Example PDF empty/too small at ${url}`);
+            continue;
+          }
+          return new Blob([blob], { type: "application/pdf" });
+        } catch (err) {
+          lastError = err;
+        }
       }
-      const blob = await response.blob();
-      return blob.type === "application/pdf"
-        ? blob
-        : new Blob([blob], { type: "application/pdf" });
+
+      throw lastError || new Error("Example PDF fetch failed");
     }
 
     function blobAsNamedFile(blob, displayName) {
@@ -1411,12 +1425,21 @@
     }
 
     async function ensureExamplePdfBlobs(pdfId) {
-      const existing = await idbGetPdf(pdfId);
-      if (existing && existing.original) {
-        return existing;
+      try {
+        const existing = await idbGetPdf(pdfId);
+        if (existing && existing.original) {
+          return existing;
+        }
+      } catch (err) {
+        console.warn(err);
       }
+
       const original = await fetchExamplePdfBlob();
-      await idbPutPdf(pdfId, original, null);
+      try {
+        await idbPutPdf(pdfId, original, null);
+      } catch (err) {
+        console.warn("IndexedDB save failed for example PDF; using in-memory copy.", err);
+      }
       return { original, simplified: null };
     }
 
@@ -1598,7 +1621,11 @@
         });
         selectedPdfId = pdfId;
         saveLibrary();
-        await idbPutPdf(pdfId, blob, null);
+        try {
+          await idbPutPdf(pdfId, blob, null);
+        } catch (err) {
+          console.warn("IndexedDB save failed for example PDF; using in-memory copy.", err);
+        }
         localStorage.setItem(LS_EXAMPLE_SEEDED_KEY, "1");
 
         selectedFile = file;
@@ -1624,7 +1651,8 @@
             /* ignore */
           }
         }
-        statusText.textContent = "Could not load example PDF.";
+        const detail = err && err.message ? ` (${err.message})` : "";
+        statusText.textContent = `Could not load example PDF.${detail}`;
         return false;
       }
     }
