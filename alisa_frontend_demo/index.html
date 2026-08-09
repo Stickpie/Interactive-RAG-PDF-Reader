@@ -1383,13 +1383,61 @@
       }
     }
 
+    async function fetchExamplePdfBlob() {
+      const response = await fetch(EXAMPLE_PDF_URL);
+      if (!response.ok) {
+        throw new Error(`Example PDF fetch failed (${response.status})`);
+      }
+      const blob = await response.blob();
+      return blob.type === "application/pdf"
+        ? blob
+        : new Blob([blob], { type: "application/pdf" });
+    }
+
+    function blobAsNamedFile(blob, displayName) {
+      try {
+        return new File([blob], displayName, { type: "application/pdf" });
+      } catch (err) {
+        const fallback = blob instanceof Blob
+          ? blob
+          : new Blob([blob], { type: "application/pdf" });
+        try {
+          Object.defineProperty(fallback, "name", { value: displayName });
+        } catch (_) {
+          /* ignore */
+        }
+        return fallback;
+      }
+    }
+
+    async function ensureExamplePdfBlobs(pdfId) {
+      const existing = await idbGetPdf(pdfId);
+      if (existing && existing.original) {
+        return existing;
+      }
+      const original = await fetchExamplePdfBlob();
+      await idbPutPdf(pdfId, original, null);
+      return { original, simplified: null };
+    }
+
     async function selectPdfFromLibrary(pdfId) {
       const pdf = library.pdfs.find((p) => p.id === pdfId);
       if (!pdf) return;
       selectedPdfId = pdfId;
       saveLibrary();
 
-      const blobs = await idbGetPdf(pdfId);
+      let blobs = await idbGetPdf(pdfId);
+      if ((!blobs || !blobs.original) && pdf.displayName === EXAMPLE_PDF_NAME) {
+        try {
+          statusText.textContent = "Restoring example PDF…";
+          blobs = await ensureExamplePdfBlobs(pdfId);
+        } catch (err) {
+          console.error(err);
+          statusText.textContent = "PDF data missing; upload again.";
+          renderSidebar();
+          return;
+        }
+      }
       if (!blobs || !blobs.original) {
         statusText.textContent = "PDF data missing; upload again.";
         renderSidebar();
@@ -1414,8 +1462,7 @@
         showSimplifiedBtn.disabled = true;
       }
 
-      const buf = await origBlob.arrayBuffer();
-      selectedFile = new File([buf], pdf.displayName, { type: "application/pdf" });
+      selectedFile = blobAsNamedFile(origBlob, pdf.displayName);
       pdfInput.value = "";
 
       currentView = simplifiedPdfUrl ? "simplified" : "original";
@@ -1513,23 +1560,36 @@
     });
 
     async function seedExamplePdfIfNeeded() {
+      const existingExample = library.pdfs.find((p) => p.displayName === EXAMPLE_PDF_NAME);
+      if (existingExample) {
+        try {
+          await ensureExamplePdfBlobs(existingExample.id);
+          localStorage.setItem(LS_EXAMPLE_SEEDED_KEY, "1");
+          if (!selectedPdfId) selectedPdfId = existingExample.id;
+          saveLibrary();
+          await selectPdfFromLibrary(selectedPdfId || existingExample.id);
+          return true;
+        } catch (err) {
+          console.error(err);
+          statusText.textContent = "Could not restore example PDF.";
+          return false;
+        }
+      }
+
       if (localStorage.getItem(LS_EXAMPLE_SEEDED_KEY) === "1") return false;
       if (library.pdfs.length > 0) {
         localStorage.setItem(LS_EXAMPLE_SEEDED_KEY, "1");
         return false;
       }
 
+      let pdfId = null;
       try {
         statusText.textContent = "Loading example PDF…";
-        const response = await fetch(EXAMPLE_PDF_URL);
-        if (!response.ok) {
-          throw new Error(`Example PDF fetch failed (${response.status})`);
-        }
-        const blob = await response.blob();
-        const file = new File([blob], EXAMPLE_PDF_NAME, { type: "application/pdf" });
+        const blob = await fetchExamplePdfBlob();
+        const file = blobAsNamedFile(blob, EXAMPLE_PDF_NAME);
 
         const folderId = ensureFolderForUpload();
-        const pdfId = newId();
+        pdfId = newId();
         library.pdfs.push({
           id: pdfId,
           folderId,
@@ -1538,12 +1598,12 @@
         });
         selectedPdfId = pdfId;
         saveLibrary();
-        await idbPutPdf(pdfId, file, null);
+        await idbPutPdf(pdfId, blob, null);
         localStorage.setItem(LS_EXAMPLE_SEEDED_KEY, "1");
 
         selectedFile = file;
         if (originalPdfUrl) URL.revokeObjectURL(originalPdfUrl);
-        originalPdfUrl = URL.createObjectURL(file);
+        originalPdfUrl = URL.createObjectURL(blob);
         simplifiedPdfUrl = null;
         showSimplifiedBtn.disabled = true;
         currentView = "original";
@@ -1554,6 +1614,16 @@
         return true;
       } catch (err) {
         console.error(err);
+        if (pdfId) {
+          library.pdfs = library.pdfs.filter((p) => p.id !== pdfId);
+          if (selectedPdfId === pdfId) selectedPdfId = null;
+          saveLibrary();
+          try {
+            await idbDeletePdf(pdfId);
+          } catch (_) {
+            /* ignore */
+          }
+        }
         statusText.textContent = "Could not load example PDF.";
         return false;
       }
