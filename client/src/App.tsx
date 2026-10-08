@@ -97,12 +97,14 @@ export function App() {
             currentView={reader.currentView}
             simplifiedReady={reader.simplifiedReady}
             simplifying={reader.simplifying}
+            canDownload={reader.pdfUrl !== null}
             onFile={(file) => {
               void reader.uploadFile(file);
             }}
             onSimplify={() => {
               void reader.simplify();
             }}
+            onDownload={reader.downloadCurrent}
             onShowOriginal={reader.showOriginal}
             onShowSimplified={reader.showSimplified}
           />

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteLibraryDocument, fetchExamplePdfBlob, inquire, simplifyPdf } from "../lib/api";
 import { isMobileViewport } from "../lib/device";
 import { ensureExamplePdfBlobs } from "../lib/examplePdf";
-import { asPdfBlob, blobAsNamedFile, newId } from "../lib/files";
+import { asPdfBlob, blobAsNamedFile, newId, pdfDownloadName } from "../lib/files";
 import { idbDeletePdf, idbGetPdf, idbPutPdf } from "../lib/idb";
 import {
   EXAMPLE_PDF_NAME,
@@ -454,6 +454,25 @@ export function useReader() {
     setCurrentView("simplified");
   }, []);
 
+  const downloadCurrent = useCallback(() => {
+    const view = currentViewRef.current;
+    const url = view === "simplified" ? urlsRef.current.simplified : urlsRef.current.original;
+    if (!url) return;
+
+    const selected = libraryStateRef.current.library.pdfs.find(
+      (pdf) => pdf.id === libraryStateRef.current.selectedPdfId,
+    );
+    const displayName =
+      selected?.displayName ||
+      (selectedFileRef.current instanceof File ? selectedFileRef.current.name : "document.pdf");
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = pdfDownloadName(displayName, view);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }, []);
+
   const openInquire = useCallback((segment: string) => {
     setInquireState({
       open: true,
@@ -532,6 +551,7 @@ export function useReader() {
     simplify,
     showOriginal,
     showSimplified,
+    downloadCurrent,
     openSidebar,
     closeSidebar,
     toggleSidebar,
