@@ -6,8 +6,10 @@ type ToolbarProps = {
   currentView: PdfView;
   simplifiedReady: boolean;
   simplifying: boolean;
+  canDownload: boolean;
   onFile: (file: File) => void;
   onSimplify: () => void;
+  onDownload: () => void;
   onShowOriginal: () => void;
   onShowSimplified: () => void;
 };
@@ -17,8 +19,10 @@ export function Toolbar({
   currentView,
   simplifiedReady,
   simplifying,
+  canDownload,
   onFile,
   onSimplify,
+  onDownload,
   onShowOriginal,
   onShowSimplified,
 }: ToolbarProps) {
@@ -43,6 +47,25 @@ export function Toolbar({
         <button type="button" id="simplifyBtn" disabled={simplifying} onClick={onSimplify}>
           <span className="btn-label-full">{simplifying ? "Simplifying…" : "Simplify PDF"}</span>
           <span className="btn-label-short">{simplifying ? "Simplifying…" : "Simplify"}</span>
+        </button>
+        <button
+          type="button"
+          className="download-pdf-btn"
+          aria-label={currentView === "simplified" ? "Download simplified PDF" : "Download original PDF"}
+          title={currentView === "simplified" ? "Download simplified PDF" : "Download original PDF"}
+          disabled={!canDownload}
+          onClick={onDownload}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 5v14M5 12l7 7 7-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       </div>
       <nav className="view-segment" aria-label="PDF view mode">
