@@ -37,14 +37,14 @@ app.add_middleware(
 )
 
 BASE_FOLDER = os.path.dirname(os.path.abspath(__file__))
-ALISA_V2 = os.path.abspath(os.path.join(BASE_FOLDER, "..", "alisa_v2"))
-UNPARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "UnparsedText"))
-PARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "ParsedText"))
-CHROMA_PATH = os.path.abspath(os.path.join(ALISA_V2, "chroma_db"))
-INQUIRE_STATE_PATH = os.path.join(ALISA_V2, "inquire_state.json")
+RAG_AGENT_DIR = os.path.abspath(os.path.join(BASE_FOLDER, "..", "server_RAGAgent"))
+UNPARSED_DIR = os.path.abspath(os.path.join(RAG_AGENT_DIR, "UnparsedText"))
+PARSED_DIR = os.path.abspath(os.path.join(RAG_AGENT_DIR, "ParsedText"))
+CHROMA_PATH = os.path.abspath(os.path.join(RAG_AGENT_DIR, "chroma_db"))
+INQUIRE_STATE_PATH = os.path.join(RAG_AGENT_DIR, "inquire_state.json")
 EXAMPLE_PDF_CANDIDATES = [
     os.path.abspath(os.path.join(BASE_FOLDER, "..", "ExamplePDF.pdf")),
-    os.path.abspath(os.path.join(BASE_FOLDER, "..", "alisa_frontend_demo", "ExamplePDF.pdf")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "client", "ExamplePDF.pdf")),
     os.path.abspath(os.path.join(BASE_FOLDER, "ExamplePDF.pdf")),
 ]
 
@@ -104,7 +104,7 @@ def cleanup_files(*paths):
 def _delete_chroma_chunks_for_source(parsed_txt_path: str) -> None:
     """Remove Chroma chunks whose document source matches the given ParsedText .txt path."""
     try:
-        sys.path.insert(0, ALISA_V2)
+        sys.path.insert(0, RAG_AGENT_DIR)
         from get_embedding_function import get_embedding_function
         from langchain_chroma import Chroma
 
@@ -202,7 +202,7 @@ async def simplify_pdf(file: UploadFile = File(...)):
             raise HTTPException(status_code=500, detail="Output PDF was not created correctly.")
 
         try:
-            sys.path.insert(0, ALISA_V2)
+            sys.path.insert(0, RAG_AGENT_DIR)
             from parse_text import parse_text as parse_text
             from populate_chroma import load_documents, split_documents, add_to_chroma
 
@@ -245,7 +245,7 @@ async def inquire(body: InquireBody):
     if not body.question or not body.question.strip():
         raise HTTPException(status_code=400, detail="Question is required.")
 
-    os.makedirs(ALISA_V2, exist_ok=True)
+    os.makedirs(RAG_AGENT_DIR, exist_ok=True)
     with open(INQUIRE_STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(
             {"segment": body.segment or "", "question": body.question.strip()},
@@ -254,7 +254,7 @@ async def inquire(body: InquireBody):
         )
 
     try:
-        sys.path.insert(0, ALISA_V2)
+        sys.path.insert(0, RAG_AGENT_DIR)
         from query_data import run_inquire_from_state_file
 
         answer = run_inquire_from_state_file()

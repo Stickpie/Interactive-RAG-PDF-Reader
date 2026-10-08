@@ -1,4 +1,4 @@
-# FastAPI backend (alisa_pdf)
+# FastAPI backend (server_pdfSimplification)
 fastapi
 uvicorn[standard]
 python-multipart
@@ -12,7 +12,7 @@ rouge-score
 textstat
 tabulate
 
-# RAG pipeline (alisa_v2)
+# RAG pipeline (server_RAGAgent)
 langchain==1.2.13
 langchain-community>=0.3.0
 langchain-chroma

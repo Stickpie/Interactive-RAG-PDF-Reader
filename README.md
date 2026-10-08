@@ -2,7 +2,7 @@
 
 This is a reading assistant that simplifies academic PDFs into dyslexia-friendly language, keeps a personal document library in the browser, and answers questions about highlighted passages using retrieval-augmented generation (RAG).
 
-The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAPI backend (`alisa_pdf/`), and a RAG pipeline (`alisa_v2/`).
+The stack is split into a web frontend (`client/`), a FastAPI backend (`server_pdfSimplification/`), and a RAG pipeline (`server_RAGAgent/`).
 
 ---
 
@@ -31,7 +31,7 @@ The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAP
 
 ## Frontend architecture
 
-**Location:** `alisa_frontend_demo/index.html` (single-page app, no build step).
+**Location:** `client/` (React + Vite). `client/index.html` is the page shell; the app lives in `client/src/`.
 
 **PDF rendering:** [PDF.js](https://mozilla.github.io/pdf.js/) draws pages to canvas and overlays a selectable text layer for highlight-based inquire.
 
@@ -56,7 +56,7 @@ The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAP
                               │  X-Stored-Stem response header
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Server stem  (under alisa_v2/UnparsedText & ParsedText)    │
+│  Server stem (server_RAGAgent/UnparsedText & ParsedText)    │
 │  • format: {32-hex-uuid}_{original-filename}.pdf            │
 │  • returned as X-Stored-Stem after POST /simplify-pdf/      │
 └─────────────────────────────────────────────────────────────┘
@@ -66,7 +66,7 @@ The stack is split into a static web frontend (`alisa_frontend_demo/`), a FastAP
 - **IndexedDB** stores the actual PDF blobs so large files do not blow the `localStorage` quota (~5 MB). When a user reopens a saved document, blobs are read from IndexedDB and turned into object URLs for PDF.js.
 - **Stem** is the server-side basename (without `.pdf`) for that upload. The frontend saves it on `library.pdfs[].storedStem` after simplification so deletes can call `DELETE /library-document/{stem}` and remove matching files and vectors on the server.
 
-The frontend talks to the API at `http://127.0.0.1:8000` (see `API_BASE` in `index.html`).
+The frontend calls the API at `/api` (`API_BASE` in `client/src/lib/api.ts`). The Vite dev server proxies that prefix to `http://127.0.0.1:8000`.
 
 ---
 
@@ -84,7 +84,7 @@ The frontend talks to the API at `http://127.0.0.1:8000` (see `API_BASE` in `ind
      │                              ▼
      │                         remakePDF → simplified PDF bytes
      │                              │
-     │                              ├─► copy to alisa_v2/UnparsedText/{stem}.pdf
+     │                              ├─► copy to server_RAGAgent/UnparsedText/{stem}.pdf
      │                              ├─► parse_text → ParsedText/{stem}.txt
      │                              └─► populate_chroma → chroma_db/
      │
@@ -103,13 +103,13 @@ The frontend talks to the API at `http://127.0.0.1:8000` (see `API_BASE` in `ind
 ### Hugging Face — dyslexia simplification
 
 - **Model:** [`Stickpie/inkling-flan-t5-simplifier`](https://huggingface.co/Stickpie/inkling-flan-t5-simplifier) (Flan-T5).
-- **Code:** `alisa_pdf/simplify.py` — `simplify_text_chunked()` splits text by paragraph so each model call stays within the tokenizer limit, then joins results. Prefixes inputs with `simplify:`.
+- **Code:** `server_pdfSimplification/simplify.py` — `simplify_text_chunked()` splits text by paragraph so each model call stays within the tokenizer limit, then joins results. Prefixes inputs with `simplify:`.
 - **Device:** Auto-selects MPS (Apple Silicon) → CUDA → CPU.
 - **First run:** Weights download from Hugging Face (~533 MB). A Hugging Face token can improve download speed.
 
 ### ChromaDB — document index
 
-- **Path:** `alisa_v2/chroma_db/`
+- **Path:** `server_RAGAgent/chroma_db/`
 - **Ingest:** After each successful `POST /simplify-pdf/`, `parse_text` writes `.txt` files under `ParsedText/`, then `populate_chroma` chunks and embeds them.
 - **Embeddings:** Ollama `nomic-embed-text` via `get_embedding_function.py` (ingest) and `query_data.py` (inquire).
 - **Cleanup:** `DELETE /library-document/{stem}` removes chunks whose metadata `source` matches the parsed `.txt` path.
@@ -178,7 +178,7 @@ ollama pull qwen2.5:7b-instruct
 
 ### 3. Start the Backend API
 
-From the **alisa_pdf**:
+From **server_pdfSimplification**:
 
 ```bash
 source ../venv/bin/activate
@@ -187,15 +187,14 @@ uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 
 ### 4. Open the frontend
 
- cd ~/Interactive-RAG-PDF-Reader/alisa_frontend_demo
- source ../venv/bin/activate
- python3 -m http.server 8080 --bind 0.0.0.0
+From **client**:
 
 ```bash
-# Python 3
-cd alisa_frontend_demo
-python -m http.server 5500
+npm install
+npm run dev
 ```
+
+Vite serves the app at [http://127.0.0.1:5173](http://127.0.0.1:5173) and proxies `/api` to the backend on port 8000.
 
 ### 5. Typical workflow
 
@@ -210,13 +209,15 @@ python -m http.server 5500
 ## Project layout
 
 ```
-├── alisa_frontend_demo/
-│   └── index.html          # SPA: library UI, PDF.js, inquire modal
-├── alisa_pdf/
+├── client/
+│   ├── index.html          # Vite page shell
+│   └── src/                # React app: library UI, PDF.js, inquire
+├── server_pdfSimplification/
 │   ├── api.py              # FastAPI app
 │   ├── simplify.py         # Flan-T5 simplification
-│   └── remakePDF.py        # Rebuild PDF from simplified elements
-├── alisa_v2/
+│   ├── remakePDF.py        # Rebuild PDF from simplified elements
+│   └── Dockerfile
+├── server_RAGAgent/
 │   ├── parse_text.py       # PDF → ParsedText/*.txt
 │   ├── populate_chroma.py  # Chunk + embed into Chroma
 │   ├── query_data.py       # RAG inquire (Ollama + Chroma)
@@ -224,7 +225,7 @@ python -m http.server 5500
 │   ├── UnparsedText/       # Stored uploads ({stem}.pdf)
 │   ├── ParsedText/         # Extracted text per stem
 │   └── chroma_db/          # Vector store (generated)
-└── requirements.txt        # Python deps for alisa_pdf + alisa_v2
+└── requirements.txt        # Python deps for server_pdfSimplification + server_RAGAgent
 ```
 
 ---

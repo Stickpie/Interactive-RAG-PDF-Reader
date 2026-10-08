@@ -1,6 +1,6 @@
 # Alisa — Integration Notes
 
-These are the changes made to `alisa_pdf/api.py` and `alisa_pdf/simplify.py` to connect the NLP service with the frontend. The same app also exposes **`POST /simplify-pdf/`** and **`POST /inquire/`** (see repo root `frontend/` and `alisa_v2/`).
+These are the changes made to `server_pdfSimplification/api.py` and `server_pdfSimplification/simplify.py` to connect the NLP service with the frontend. The same app also exposes **`POST /simplify-pdf/`** and **`POST /inquire/`** (see `client/` and `server_RAGAgent/`).
 
 ---
 
@@ -53,7 +53,7 @@ Uses `pytesseract.image_to_string()` on the uploaded image. Requires `pytesserac
 ## Running locally
 
 ```bash
-cd alisa/
+cd server_pdfSimplification/
 uvicorn api:app --host 0.0.0.0 --port 8001
 ```
 
