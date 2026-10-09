@@ -55,10 +55,7 @@ def _query_with_segment(question: str, segment: str) -> str:
 
     model = ChatOllama(model="qwen2.5:7b-instruct")
     response = model.invoke(prompt)
-
-    sources = [doc.metadata.get("source", None) for doc, _score in results]
-    formatted_response = f"Response: {_response_text(response)}\nSources: {sources}"
-    return formatted_response
+    return _response_text(response)
 
 
 def run_inquire_from_state_file() -> str:
