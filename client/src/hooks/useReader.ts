@@ -397,7 +397,7 @@ export function useReader() {
 
     const targetPdfId = libraryStateRef.current.selectedPdfId;
     setSimplifying(true);
-    setStatus("Uploading and simplifying…");
+    setStatus("Simplifying… this may take up to 2 min.");
     try {
       const { blob, stem } = await simplifyPdf(file);
       replaceUrl("simplified", URL.createObjectURL(blob));
@@ -495,7 +495,11 @@ export function useReader() {
       return;
     }
 
-    setInquireState((current) => ({ ...current, answer: "Loading…", submitting: true }));
+    setInquireState((current) => ({
+      ...current,
+      answer: "Loading...the CPU is trying it's best",
+      submitting: true,
+    }));
     try {
       const answer = await inquire(segment, trimmed);
       setInquireState((current) => ({ ...current, answer, submitting: false }));
