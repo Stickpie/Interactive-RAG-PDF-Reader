@@ -26,20 +26,19 @@ function errorMessage(data: ErrorBody, status: number): string {
   return message || data.message || `Request failed (${status}).`;
 }
 
-export async function fetchExamplePdfBlob(): Promise<Blob> {
-  const urls = [`${API_BASE}/example-pdf`, "ExamplePDF.pdf"];
+async function fetchPdfBlob(urls: string[], label: string): Promise<Blob> {
   let lastError: unknown = null;
 
   for (const url of urls) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) {
-        lastError = new Error(`Example PDF fetch failed (${response.status}) at ${url}`);
+        lastError = new Error(`${label} fetch failed (${response.status}) at ${url}`);
         continue;
       }
       const blob = await response.blob();
       if (!blob || blob.size < 100) {
-        lastError = new Error(`Example PDF empty/too small at ${url}`);
+        lastError = new Error(`${label} empty/too small at ${url}`);
         continue;
       }
       return new Blob([blob], { type: "application/pdf" });
@@ -48,7 +47,18 @@ export async function fetchExamplePdfBlob(): Promise<Blob> {
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("Example PDF fetch failed");
+  throw lastError instanceof Error ? lastError : new Error(`${label} fetch failed`);
+}
+
+export function fetchExamplePdfBlob(): Promise<Blob> {
+  return fetchPdfBlob([`${API_BASE}/example-pdf`, "ExamplePDF.pdf"], "Example PDF");
+}
+
+export function fetchExampleSimplifiedPdfBlob(): Promise<Blob> {
+  return fetchPdfBlob(
+    [`${API_BASE}/example-pdf-simplified`, "ExamplePDF-simplified.pdf"],
+    "Simplified example PDF",
+  );
 }
 
 export async function deleteLibraryDocument(stem: string): Promise<void> {

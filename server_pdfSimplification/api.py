@@ -42,10 +42,14 @@ UNPARSED_DIR = os.path.abspath(os.path.join(RAG_AGENT_DIR, "UnparsedText"))
 PARSED_DIR = os.path.abspath(os.path.join(RAG_AGENT_DIR, "ParsedText"))
 CHROMA_PATH = os.path.abspath(os.path.join(RAG_AGENT_DIR, "chroma_db"))
 INQUIRE_STATE_PATH = os.path.join(RAG_AGENT_DIR, "inquire_state.json")
-EXAMPLE_PDF_CANDIDATES = [
-    os.path.abspath(os.path.join(BASE_FOLDER, "..", "ExamplePDF.pdf")),
-    os.path.abspath(os.path.join(BASE_FOLDER, "..", "client", "ExamplePDF.pdf")),
-    os.path.abspath(os.path.join(BASE_FOLDER, "ExamplePDF.pdf")),
+# Drop-in demo pair. Replace these two files in client/public and reload the page.
+EXAMPLE_PDF_NAME = "ExamplePDF.pdf"
+EXAMPLE_PDF_SIMPLIFIED_NAME = "ExamplePDF-simplified.pdf"
+EXAMPLE_PDF_DIRS = [
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "client", "public")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "..")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "client")),
+    BASE_FOLDER,
 ]
 
 # Stored PDF basename without extension: 32-hex uuid + underscore + original name (no path chars).
@@ -69,11 +73,24 @@ def _stored_upload_path(original_filename: str) -> str:
     return os.path.join(UNPARSED_DIR, safe)
 
 
-def _resolve_example_pdf_path() -> str | None:
-    for path in EXAMPLE_PDF_CANDIDATES:
+def _resolve_example_pdf_path(filename: str) -> str | None:
+    for directory in EXAMPLE_PDF_DIRS:
+        path = os.path.join(directory, filename)
         if os.path.isfile(path):
             return path
     return None
+
+
+def _example_pdf_response(filename: str):
+    path = _resolve_example_pdf_path(filename)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"{filename} not found on server.")
+    return FileResponse(
+        path=path,
+        media_type="application/pdf",
+        filename=filename,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/")
@@ -83,14 +100,12 @@ async def root():
 
 @app.get("/example-pdf")
 async def get_example_pdf():
-    path = _resolve_example_pdf_path()
-    if not path:
-        raise HTTPException(status_code=404, detail="ExamplePDF.pdf not found on server.")
-    return FileResponse(
-        path=path,
-        media_type="application/pdf",
-        filename="ExamplePDF.pdf",
-    )
+    return _example_pdf_response(EXAMPLE_PDF_NAME)
+
+
+@app.get("/example-pdf-simplified")
+async def get_example_pdf_simplified():
+    return _example_pdf_response(EXAMPLE_PDF_SIMPLIFIED_NAME)
 
 def cleanup_files(*paths):
     for path in paths:

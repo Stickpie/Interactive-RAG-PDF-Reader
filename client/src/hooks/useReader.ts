@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteLibraryDocument, fetchExamplePdfBlob, inquire, simplifyPdf } from "../lib/api";
+import { deleteLibraryDocument, inquire, simplifyPdf } from "../lib/api";
 import { isMobileViewport } from "../lib/device";
 import { ensureExamplePdfBlobs } from "../lib/examplePdf";
 import { asPdfBlob, blobAsNamedFile, newId, pdfDownloadName } from "../lib/files";
@@ -137,10 +137,10 @@ export function useReader() {
       if (!pdf) return;
       commitLibrary({ ...libraryStateRef.current, selectedPdfId: pdfId });
 
-      let blobs = await idbGetPdf(pdfId);
-      if (!blobs.original && pdf.displayName === EXAMPLE_PDF_NAME) {
+      let blobs = pdf.displayName === EXAMPLE_PDF_NAME ? { original: null, simplified: null } : await idbGetPdf(pdfId);
+      if (pdf.displayName === EXAMPLE_PDF_NAME) {
         try {
-          setStatus("Restoring example PDF…");
+          setStatus("Loading example PDF…");
           blobs = await ensureExamplePdfBlobs(pdfId);
         } catch (error) {
           console.error(error);
@@ -165,7 +165,6 @@ export function useReader() {
     );
     if (existingExample) {
       try {
-        await ensureExamplePdfBlobs(existingExample.id);
         markExampleSeeded();
         if (!libraryStateRef.current.selectedPdfId) {
           commitLibrary({ ...libraryStateRef.current, selectedPdfId: existingExample.id });
@@ -188,8 +187,6 @@ export function useReader() {
     let pdfId: string | null = null;
     try {
       setStatus("Loading example PDF…");
-      const blob = await fetchExamplePdfBlob();
-      const file = blobAsNamedFile(blob, EXAMPLE_PDF_NAME);
       const folderId = ensureFolderForUpload();
       pdfId = newId();
       const current = libraryStateRef.current;
@@ -207,18 +204,13 @@ export function useReader() {
         selectedFolderId: folderId,
         selectedPdfId: pdfId,
       });
-      try {
-        await idbPutPdf(pdfId, blob, null);
-      } catch (error) {
-        console.warn("IndexedDB save failed for example PDF; using in-memory copy.", error);
-      }
+      const blobs = await ensureExamplePdfBlobs(pdfId);
+      if (!blobs.original) throw new Error("Example PDF fetch failed");
       markExampleSeeded();
-      selectedFileRef.current = file;
-      replaceUrl("original", URL.createObjectURL(blob));
-      replaceUrl("simplified", null);
-      currentViewRef.current = "original";
-      setCurrentView("original");
-      setStatus("Example PDF loaded.");
+      showPdfBlobs(blobs.original, blobs.simplified, EXAMPLE_PDF_NAME);
+      setStatus(
+        blobs.simplified ? "Example PDF loaded." : "Example PDF loaded, but the simplified file was not found.",
+      );
       return true;
     } catch (error) {
       console.error(error);
@@ -242,7 +234,7 @@ export function useReader() {
       setStatus(`Could not load example PDF.${detail}`);
       return false;
     }
-  }, [commitLibrary, ensureFolderForUpload, replaceUrl, selectPdf]);
+  }, [commitLibrary, ensureFolderForUpload, selectPdf, showPdfBlobs]);
 
   useEffect(() => {
     if (bootedRef.current) return;
