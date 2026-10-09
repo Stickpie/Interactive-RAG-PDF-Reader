@@ -1,5 +1,5 @@
-# Build from the repository root (MZ07), not from alisa_pdf:
-#   docker build -f alisa_pdf/Dockerfile .
+# Build from the repository root (MZ07), not from server_pdfSimplification:
+#   docker build -f server_pdfSimplification/Dockerfile .
 #
 # Ollama runs on the host by default; from inside the container use host.docker.internal
 # (Docker Desktop) or your LAN IP. If needed, extend the app to pass base_url into
@@ -17,14 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# API and PDF pipeline live here; api.py resolves alisa_v2 as /app/../alisa_v2
+# API and PDF pipeline live here; api.py resolves server_RAGAgent as /app/../server_RAGAgent
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-COPY alisa_pdf/ /app/
-COPY alisa_v2/ /alisa_v2/
+COPY server_pdfSimplification/ /app/
+COPY server_RAGAgent/ /server_RAGAgent/
 
-RUN mkdir -p /alisa_v2/UnparsedText /alisa_v2/ParsedText /alisa_v2/chroma_db
+RUN mkdir -p /server_RAGAgent/UnparsedText /server_RAGAgent/ParsedText /server_RAGAgent/chroma_db
 
 EXPOSE 8000
 

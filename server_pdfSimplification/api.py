@@ -37,15 +37,19 @@ app.add_middleware(
 )
 
 BASE_FOLDER = os.path.dirname(os.path.abspath(__file__))
-ALISA_V2 = os.path.abspath(os.path.join(BASE_FOLDER, "..", "alisa_v2"))
-UNPARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "UnparsedText"))
-PARSED_DIR = os.path.abspath(os.path.join(ALISA_V2, "ParsedText"))
-CHROMA_PATH = os.path.abspath(os.path.join(ALISA_V2, "chroma_db"))
-INQUIRE_STATE_PATH = os.path.join(ALISA_V2, "inquire_state.json")
-EXAMPLE_PDF_CANDIDATES = [
-    os.path.abspath(os.path.join(BASE_FOLDER, "..", "ExamplePDF.pdf")),
-    os.path.abspath(os.path.join(BASE_FOLDER, "..", "alisa_frontend_demo", "ExamplePDF.pdf")),
-    os.path.abspath(os.path.join(BASE_FOLDER, "ExamplePDF.pdf")),
+RAG_AGENT_DIR = os.path.abspath(os.path.join(BASE_FOLDER, "..", "server_RAGAgent"))
+UNPARSED_DIR = os.path.abspath(os.path.join(RAG_AGENT_DIR, "UnparsedText"))
+PARSED_DIR = os.path.abspath(os.path.join(RAG_AGENT_DIR, "ParsedText"))
+CHROMA_PATH = os.path.abspath(os.path.join(RAG_AGENT_DIR, "chroma_db"))
+INQUIRE_STATE_PATH = os.path.join(RAG_AGENT_DIR, "inquire_state.json")
+# Drop-in demo pair. Replace these two files in client/public and reload the page.
+EXAMPLE_PDF_NAME = "ExamplePDF.pdf"
+EXAMPLE_PDF_SIMPLIFIED_NAME = "ExamplePDF-simplified.pdf"
+EXAMPLE_PDF_DIRS = [
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "client", "public")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "..")),
+    os.path.abspath(os.path.join(BASE_FOLDER, "..", "client")),
+    BASE_FOLDER,
 ]
 
 # Stored PDF basename without extension: 32-hex uuid + underscore + original name (no path chars).
@@ -69,11 +73,24 @@ def _stored_upload_path(original_filename: str) -> str:
     return os.path.join(UNPARSED_DIR, safe)
 
 
-def _resolve_example_pdf_path() -> str | None:
-    for path in EXAMPLE_PDF_CANDIDATES:
+def _resolve_example_pdf_path(filename: str) -> str | None:
+    for directory in EXAMPLE_PDF_DIRS:
+        path = os.path.join(directory, filename)
         if os.path.isfile(path):
             return path
     return None
+
+
+def _example_pdf_response(filename: str):
+    path = _resolve_example_pdf_path(filename)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"{filename} not found on server.")
+    return FileResponse(
+        path=path,
+        media_type="application/pdf",
+        filename=filename,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/")
@@ -83,14 +100,12 @@ async def root():
 
 @app.get("/example-pdf")
 async def get_example_pdf():
-    path = _resolve_example_pdf_path()
-    if not path:
-        raise HTTPException(status_code=404, detail="ExamplePDF.pdf not found on server.")
-    return FileResponse(
-        path=path,
-        media_type="application/pdf",
-        filename="ExamplePDF.pdf",
-    )
+    return _example_pdf_response(EXAMPLE_PDF_NAME)
+
+
+@app.get("/example-pdf-simplified")
+async def get_example_pdf_simplified():
+    return _example_pdf_response(EXAMPLE_PDF_SIMPLIFIED_NAME)
 
 def cleanup_files(*paths):
     for path in paths:
@@ -104,7 +119,7 @@ def cleanup_files(*paths):
 def _delete_chroma_chunks_for_source(parsed_txt_path: str) -> None:
     """Remove Chroma chunks whose document source matches the given ParsedText .txt path."""
     try:
-        sys.path.insert(0, ALISA_V2)
+        sys.path.insert(0, RAG_AGENT_DIR)
         from get_embedding_function import get_embedding_function
         from langchain_chroma import Chroma
 
@@ -202,7 +217,7 @@ async def simplify_pdf(file: UploadFile = File(...)):
             raise HTTPException(status_code=500, detail="Output PDF was not created correctly.")
 
         try:
-            sys.path.insert(0, ALISA_V2)
+            sys.path.insert(0, RAG_AGENT_DIR)
             from parse_text import parse_text as parse_text
             from populate_chroma import load_documents, split_documents, add_to_chroma
 
@@ -245,7 +260,7 @@ async def inquire(body: InquireBody):
     if not body.question or not body.question.strip():
         raise HTTPException(status_code=400, detail="Question is required.")
 
-    os.makedirs(ALISA_V2, exist_ok=True)
+    os.makedirs(RAG_AGENT_DIR, exist_ok=True)
     with open(INQUIRE_STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(
             {"segment": body.segment or "", "question": body.question.strip()},
@@ -254,7 +269,7 @@ async def inquire(body: InquireBody):
         )
 
     try:
-        sys.path.insert(0, ALISA_V2)
+        sys.path.insert(0, RAG_AGENT_DIR)
         from query_data import run_inquire_from_state_file
 
         answer = run_inquire_from_state_file()

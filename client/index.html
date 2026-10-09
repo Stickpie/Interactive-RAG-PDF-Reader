@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>PDF Simplifier</title>
+  <script>
+    (function () {
+      function detectMobileEnv() {
+        return (
+          window.matchMedia("(max-width: 768px)").matches ||
+          window.matchMedia("(max-device-width: 768px)").matches ||
+          (window.matchMedia("(hover: none) and (pointer: coarse)").matches &&
+            Math.min(window.screen.width, window.screen.height) <= 1024)
+        );
+      }
+      if (detectMobileEnv()) {
+        document.documentElement.classList.add("is-mobile-env");
+      }
+      window.__detectMobileEnv = detectMobileEnv;
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
