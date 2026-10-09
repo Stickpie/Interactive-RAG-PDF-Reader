@@ -22,6 +22,15 @@ export type InquireState = {
   submitting: boolean;
 };
 
+const SLOW_STATUS_MS = 30_000;
+const EXAMPLE_SWITCH_MS = 3_000;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 const CLOSED_INQUIRE: InquireState = {
   open: false,
   segment: "",
@@ -397,6 +406,8 @@ export function useReader() {
     const targetPdfId = libraryStateRef.current.selectedPdfId;
     const selected = libraryStateRef.current.library.pdfs.find((pdf) => pdf.id === targetPdfId);
     if (selected?.displayName === EXAMPLE_PDF_NAME) {
+      setSimplifying(true);
+      setStatus("Uploading and simplifying…");
       try {
         if (!urlsRef.current.simplified) {
           const blob = await fetchExampleSimplifiedPdfBlob();
@@ -406,18 +417,25 @@ export function useReader() {
             if (fromIdb.original) await idbPutPdf(targetPdfId, asPdfBlob(fromIdb.original), blob);
           }
         }
+        await wait(EXAMPLE_SWITCH_MS);
+        if (libraryStateRef.current.selectedPdfId !== targetPdfId) return;
         currentViewRef.current = "simplified";
         setCurrentView("simplified");
         setStatus("Simplified PDF ready.");
       } catch (error) {
         console.error(error);
         setStatus("Could not load the simplified example PDF.");
+      } finally {
+        setSimplifying(false);
       }
       return;
     }
 
     setSimplifying(true);
-    setStatus("Simplifying… this may take up to 2 min.");
+    setStatus("Uploading and simplifying…");
+    const slowStatus = window.setTimeout(() => {
+      setStatus("Simplifying… this may take up to 2 min.");
+    }, SLOW_STATUS_MS);
     try {
       const { blob, stem } = await simplifyPdf(file);
       replaceUrl("simplified", URL.createObjectURL(blob));
@@ -450,6 +468,7 @@ export function useReader() {
       console.error(error);
       setStatus("Error simplifying PDF.");
     } finally {
+      window.clearTimeout(slowStatus);
       setSimplifying(false);
     }
   }, [commitLibrary, replaceUrl]);
@@ -517,9 +536,14 @@ export function useReader() {
 
     setInquireState((current) => ({
       ...current,
-      answer: "Loading...the CPU is trying it's best",
+      answer: "Loading...",
       submitting: true,
     }));
+    const slowAnswer = window.setTimeout(() => {
+      setInquireState((current) =>
+        current.submitting ? { ...current, answer: "Loading...our CPU is trying it's best" } : current,
+      );
+    }, SLOW_STATUS_MS);
     try {
       const answer = await inquire(segment, trimmed);
       setInquireState((current) => ({ ...current, answer, submitting: false }));
@@ -527,6 +551,8 @@ export function useReader() {
       console.error(error);
       const message = error instanceof Error ? error.message : "Could not reach the API. Is the server running?";
       setInquireState((current) => ({ ...current, answer: message, submitting: false }));
+    } finally {
+      window.clearTimeout(slowAnswer);
     }
   }, []);
 
