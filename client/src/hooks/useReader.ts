@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteLibraryDocument, inquire, simplifyPdf } from "../lib/api";
+import { deleteLibraryDocument, fetchExampleSimplifiedPdfBlob, inquire, simplifyPdf } from "../lib/api";
 import { isMobileViewport } from "../lib/device";
 import { ensureExamplePdfBlobs } from "../lib/examplePdf";
 import { asPdfBlob, blobAsNamedFile, newId, pdfDownloadName } from "../lib/files";
@@ -124,9 +124,8 @@ export function useReader() {
       replaceUrl("original", URL.createObjectURL(originalBlob));
       replaceUrl("simplified", simplifiedBlob ? URL.createObjectURL(simplifiedBlob) : null);
       selectedFileRef.current = blobAsNamedFile(originalBlob, displayName);
-      const view: PdfView = simplifiedBlob ? "simplified" : "original";
-      currentViewRef.current = view;
-      setCurrentView(view);
+      currentViewRef.current = "original";
+      setCurrentView("original");
     },
     [replaceUrl],
   );
@@ -396,6 +395,27 @@ export function useReader() {
     }
 
     const targetPdfId = libraryStateRef.current.selectedPdfId;
+    const selected = libraryStateRef.current.library.pdfs.find((pdf) => pdf.id === targetPdfId);
+    if (selected?.displayName === EXAMPLE_PDF_NAME) {
+      try {
+        if (!urlsRef.current.simplified) {
+          const blob = await fetchExampleSimplifiedPdfBlob();
+          replaceUrl("simplified", URL.createObjectURL(blob));
+          if (targetPdfId) {
+            const fromIdb = await idbGetPdf(targetPdfId);
+            if (fromIdb.original) await idbPutPdf(targetPdfId, asPdfBlob(fromIdb.original), blob);
+          }
+        }
+        currentViewRef.current = "simplified";
+        setCurrentView("simplified");
+        setStatus("Simplified PDF ready.");
+      } catch (error) {
+        console.error(error);
+        setStatus("Could not load the simplified example PDF.");
+      }
+      return;
+    }
+
     setSimplifying(true);
     setStatus("Simplifying… this may take up to 2 min.");
     try {
