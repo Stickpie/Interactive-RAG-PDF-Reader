@@ -397,24 +397,6 @@
       vertical-align: top;
     }
 
-    .textLayer {
-      position: absolute;
-      left: 0;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      overflow: hidden;
-      line-height: 1;
-    }
-
-    .textLayer span {
-      color: transparent;
-      position: absolute;
-      white-space: pre;
-      cursor: text;
-      transform-origin: 0 0;
-    }
-
     .status {
       margin-bottom: 12px;
       color: #d8c8f6;
@@ -514,7 +496,6 @@
     }
 
     .mobile-header,
-    .mobile-hint,
     .sidebar-close-btn,
     .sidebar-upload-btn,
     .sidebar-close-hint,
@@ -882,7 +863,6 @@
       }
 
       .btn-label-short,
-      .mobile-hint,
       .file-choose-btn {
         display: block;
       }
@@ -919,22 +899,6 @@
       .pdf-page canvas {
         width: 100%;
         height: auto;
-      }
-
-      .textLayer span {
-        font-size: max(16px, 1em) !important;
-      }
-
-      .mobile-hint {
-        margin: 0 16px 18px;
-        padding: 12px 14px;
-        text-align: center;
-        font-size: 0.9rem;
-        color: var(--muted);
-        font-style: italic;
-        border: 1px dashed rgba(180, 112, 255, 0.28);
-        border-radius: 12px;
-        background: rgba(168, 85, 247, 0.06);
       }
 
       .file-actions {
@@ -1022,11 +986,6 @@
       #pdf-pages {
         padding: 14px 12px 10px;
       }
-
-      .mobile-hint {
-        font-size: 0.85rem;
-        padding: 12px;
-      }
     }
   </style>
 </head>
@@ -1074,8 +1033,6 @@
       <div class="status" id="status" aria-live="polite">Upload a PDF to begin.</div>
 
       <div id="pdf-pages" aria-label="PDF pages"></div>
-
-      <p class="mobile-hint">Tap text to ask AI query…</p>
     </div>
   </div>
 
@@ -1674,23 +1631,6 @@
       })
       .catch((err) => console.error(err));
 
-    function renderTextLayerFallback(textContent, container, viewport) {
-      const items = textContent.items;
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const s = item.str;
-        if (!s || !s.trim()) continue;
-        const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-        const span = document.createElement("span");
-        span.textContent = s;
-        span.style.left = tx[4] + "px";
-        span.style.top = tx[5] + "px";
-        const fontHeight = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-        span.style.fontSize = fontHeight + "px";
-        container.appendChild(span);
-      }
-    }
-
     async function renderPdf(url) {
       if (typeof pdfjsLib === "undefined") {
         statusText.textContent = "PDF.js failed to load. Check your network.";
@@ -1719,29 +1659,7 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
 
-        const textLayerDiv = document.createElement("div");
-        textLayerDiv.className = "textLayer";
-        const textContent = await page.getTextContent();
-
-        try {
-          if (typeof pdfjsLib.renderTextLayer === "function") {
-            pdfjsLib.renderTextLayer({
-              textContent,
-              container: textLayerDiv,
-              viewport,
-              textDivs: [],
-            });
-          } else {
-            renderTextLayerFallback(textContent, textLayerDiv, viewport);
-          }
-        } catch (e) {
-          console.warn("renderTextLayer failed, using fallback", e);
-          textLayerDiv.innerHTML = "";
-          renderTextLayerFallback(textContent, textLayerDiv, viewport);
-        }
-
         wrap.appendChild(canvas);
-        wrap.appendChild(textLayerDiv);
         pdfPages.appendChild(wrap);
       }
     }
@@ -1751,8 +1669,8 @@
       renderPdf(url).then(() => {
         statusText.textContent =
           currentView === "simplified"
-            ? "Showing simplified PDF (select text to inquire)."
-            : "Showing original PDF (select text to inquire).";
+            ? "Showing simplified PDF."
+            : "Showing original PDF.";
       }).catch((err) => {
         console.error(err);
         statusText.textContent = "Could not render PDF.";
@@ -1834,24 +1752,6 @@
       currentView = "simplified";
       showPdf(simplifiedPdfUrl);
       setActiveButton(showSimplifiedBtn);
-    });
-
-    pdfPages.addEventListener("mouseup", () => {
-      const sel = window.getSelection();
-      const text = sel ? sel.toString().trim() : "";
-      if (text.length > 0) {
-        openInquire(text);
-      }
-    });
-
-    pdfPages.addEventListener("touchend", () => {
-      setTimeout(() => {
-        const sel = window.getSelection();
-        const text = sel ? sel.toString().trim() : "";
-        if (text.length > 0) {
-          openInquire(text);
-        }
-      }, 50);
     });
 
     function triggerFileUpload() {

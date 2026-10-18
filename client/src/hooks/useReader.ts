@@ -565,8 +565,8 @@ export function useReader() {
   const handleRendered = useCallback(() => {
     setStatus(
       currentViewRef.current === "simplified"
-        ? "Showing simplified PDF (select text to inquire)."
-        : "Showing original PDF (select text to inquire).",
+        ? "Showing simplified PDF."
+        : "Showing original PDF.",
     );
   }, []);
 

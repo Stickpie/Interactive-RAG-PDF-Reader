@@ -372,24 +372,6 @@
       vertical-align: top;
     }
 
-    .textLayer {
-      position: absolute;
-      left: 0;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      overflow: hidden;
-      line-height: 1;
-    }
-
-    .textLayer span {
-      color: transparent;
-      position: absolute;
-      white-space: pre;
-      cursor: text;
-      transform-origin: 0 0;
-    }
-
     .status {
       margin-bottom: 12px;
       color: #d8c8f6;
@@ -489,7 +471,6 @@
     }
 
     .mobile-header,
-    .mobile-hint,
     .sidebar-close-btn,
     .sidebar-upload-btn,
     .sidebar-close-hint,
@@ -874,7 +855,6 @@
       }
 
       .btn-label-short,
-      .mobile-hint,
       .file-choose-btn {
         display: block;
       }
@@ -911,22 +891,6 @@
       .pdf-page canvas {
         width: 100%;
         height: auto;
-      }
-
-      .textLayer span {
-        font-size: max(16px, 1em) !important;
-      }
-
-      .mobile-hint {
-        margin: 0 16px 18px;
-        padding: 12px 14px;
-        text-align: center;
-        font-size: 0.9rem;
-        color: var(--muted);
-        font-style: italic;
-        border: 1px dashed rgba(180, 112, 255, 0.28);
-        border-radius: 12px;
-        background: rgba(168, 85, 247, 0.06);
       }
 
       .file-actions {
@@ -1023,10 +987,5 @@
 
       #pdf-pages {
         padding: 14px 12px 10px;
-      }
-
-      .mobile-hint {
-        font-size: 0.85rem;
-        padding: 12px;
       }
     }

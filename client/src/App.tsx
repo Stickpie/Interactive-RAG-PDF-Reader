@@ -117,9 +117,7 @@ export function App() {
             onRendering={reader.handleRendering}
             onRendered={reader.handleRendered}
             onRenderError={reader.handleRenderError}
-            onTextSelect={reader.openInquire}
           />
-          <p className="mobile-hint">Tap text to ask AI query…</p>
         </div>
       </div>
 

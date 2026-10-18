@@ -8,26 +8,7 @@ type PdfViewerProps = {
   onRendering: () => void;
   onRendered: () => void;
   onRenderError: () => void;
-  onTextSelect: (text: string) => void;
 };
-
-function renderTextLayerFallback(
-  items: Array<{ str?: string; transform?: number[] } | { type?: string }>,
-  container: HTMLElement,
-  viewportTransform: number[],
-) {
-  for (const item of items) {
-    if (!("str" in item) || !item.str || !item.str.trim() || !item.transform) continue;
-    const tx = pdfjsLib.Util.transform(viewportTransform, item.transform);
-    const span = document.createElement("span");
-    span.textContent = item.str;
-    span.style.left = `${tx[4]}px`;
-    span.style.top = `${tx[5]}px`;
-    const fontHeight = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-    span.style.fontSize = `${fontHeight}px`;
-    container.appendChild(span);
-  }
-}
 
 export function PdfViewer({
   url,
@@ -35,11 +16,10 @@ export function PdfViewer({
   onRendering,
   onRendered,
   onRenderError,
-  onTextSelect,
 }: PdfViewerProps) {
   const pagesRef = useRef<HTMLDivElement>(null);
-  const callbacksRef = useRef({ onRendering, onRendered, onRenderError, onTextSelect });
-  callbacksRef.current = { onRendering, onRendered, onRenderError, onTextSelect };
+  const callbacksRef = useRef({ onRendering, onRendered, onRenderError });
+  callbacksRef.current = { onRendering, onRendered, onRenderError };
 
   useEffect(() => {
     const container = pagesRef.current;
@@ -85,28 +65,7 @@ export function PdfViewer({
           await page.render({ canvasContext: context, viewport }).promise;
           if (cancelled) return;
 
-          const textLayerDiv = document.createElement("div");
-          textLayerDiv.className = "textLayer";
-          const textContent = await page.getTextContent();
-          if (cancelled) return;
-
-          try {
-            const textLayer = pdfjsLib.renderTextLayer({
-              textContentSource: textContent,
-              container: textLayerDiv,
-              viewport,
-              textDivs: [],
-            });
-            await textLayer.promise;
-          } catch (error) {
-            if (cancelled) return;
-            console.warn("renderTextLayer failed, using fallback", error);
-            textLayerDiv.innerHTML = "";
-            renderTextLayerFallback(textContent.items, textLayerDiv, viewport.transform);
-          }
-
           wrap.appendChild(canvas);
-          wrap.appendChild(textLayerDiv);
           container.appendChild(wrap);
         }
 
@@ -124,20 +83,5 @@ export function PdfViewer({
     };
   }, [url, layoutTick]);
 
-  const readSelection = () => {
-    const text = window.getSelection()?.toString().trim() ?? "";
-    if (text.length > 0) callbacksRef.current.onTextSelect(text);
-  };
-
-  return (
-    <div
-      id="pdf-pages"
-      ref={pagesRef}
-      aria-label="PDF pages"
-      onMouseUp={readSelection}
-      onTouchEnd={() => {
-        window.setTimeout(readSelection, 50);
-      }}
-    />
-  );
+  return <div id="pdf-pages" ref={pagesRef} aria-label="PDF pages" />;
 }
