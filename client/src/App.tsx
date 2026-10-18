@@ -9,7 +9,7 @@ import { useViewport } from "./hooks/useViewport";
 
 export function App() {
   const reader = useReader();
-  const { kind, tick } = useViewport();
+  const { kind } = useViewport();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
@@ -113,7 +113,7 @@ export function App() {
           </div>
           <PdfViewer
             url={reader.pdfUrl}
-            layoutTick={tick}
+            fileName={reader.pdfFileName}
             onRendering={reader.handleRendering}
             onRendered={reader.handleRendered}
             onRenderError={reader.handleRenderError}

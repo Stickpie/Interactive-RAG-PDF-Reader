@@ -561,7 +561,9 @@ export function useReader() {
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
 
   const handleRendering = useCallback(() => setStatus("Rendering PDF…"), []);
-  const handleRenderError = useCallback(() => setStatus("Could not render PDF."), []);
+  const handleRenderError = useCallback((message?: string) => {
+    setStatus(message || "Could not render PDF.");
+  }, []);
   const handleRendered = useCallback(() => {
     setStatus(
       currentViewRef.current === "simplified"
@@ -571,6 +573,8 @@ export function useReader() {
   }, []);
 
   const pdfUrl = currentView === "simplified" ? simplifiedPdfUrl : originalPdfUrl;
+  const selectedPdf = libraryState.library.pdfs.find((pdf) => pdf.id === libraryState.selectedPdfId);
+  const pdfFileName = pdfDownloadName(selectedPdf?.displayName || "document.pdf", currentView);
 
   return {
     folders: libraryState.library.folders,
@@ -579,6 +583,7 @@ export function useReader() {
     selectedPdfId: libraryState.selectedPdfId,
     status,
     pdfUrl,
+    pdfFileName,
     currentView,
     simplifiedReady: simplifiedPdfUrl !== null,
     simplifying,

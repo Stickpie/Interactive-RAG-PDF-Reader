@@ -1,87 +1,77 @@
 import { useEffect, useRef } from "react";
-import { isMobileViewport, isTabletViewport } from "../lib/device";
-import pdfjsLib from "../pdfSetup";
+import { loadAdobePdfEmbed } from "../lib/adobeViewer";
+
+const ADOBE_VIEW_ID = "pdf-pages";
 
 type PdfViewerProps = {
   url: string | null;
-  layoutTick: number;
+  fileName: string;
   onRendering: () => void;
   onRendered: () => void;
-  onRenderError: () => void;
+  onRenderError: (message?: string) => void;
 };
 
-export function PdfViewer({
-  url,
-  layoutTick,
-  onRendering,
-  onRendered,
-  onRenderError,
-}: PdfViewerProps) {
-  const pagesRef = useRef<HTMLDivElement>(null);
+export function PdfViewer({ url, fileName, onRendering, onRendered, onRenderError }: PdfViewerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef({ onRendering, onRendered, onRenderError });
   callbacksRef.current = { onRendering, onRendered, onRenderError };
 
   useEffect(() => {
-    const container = pagesRef.current;
+    const container = containerRef.current;
     if (!container) return;
-    if (!url) {
-      container.innerHTML = "";
-      return;
-    }
+    container.replaceChildren();
+    if (!url) return;
 
     let cancelled = false;
 
     const render = async () => {
       callbacksRef.current.onRendering();
-      container.innerHTML = "";
-      try {
-        const pdf = await pdfjsLib.getDocument(url).promise;
-        if (cancelled) return;
-        const firstPage = await pdf.getPage(1);
-        if (cancelled) return;
-
-        const viewportAt1 = firstPage.getViewport({ scale: 1 });
-        const horizontalPadding = isMobileViewport() ? 32 : 36;
-        const maxWidth = Math.max(container.clientWidth - horizontalPadding, 280);
-        const fitScale = maxWidth / viewportAt1.width;
-        const scale = isMobileViewport()
-          ? fitScale
-          : Math.min(isTabletViewport() ? 1.1 : 1.25, fitScale);
-
-        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-          const page = pageNumber === 1 ? firstPage : await pdf.getPage(pageNumber);
-          if (cancelled) return;
-          const viewport = page.getViewport({ scale });
-          const wrap = document.createElement("div");
-          wrap.className = "pdf-page";
-          wrap.style.width = `${viewport.width}px`;
-          wrap.style.maxWidth = "100%";
-
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          if (!context) throw new Error("Could not get a canvas drawing context.");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          await page.render({ canvasContext: context, viewport }).promise;
-          if (cancelled) return;
-
-          wrap.appendChild(canvas);
-          container.appendChild(wrap);
-        }
-
-        if (!cancelled) callbacksRef.current.onRendered();
-      } catch (error) {
-        if (cancelled) return;
-        console.error(error);
-        callbacksRef.current.onRenderError();
+      const clientId = import.meta.env.VITE_ADOBE_CLIENT_ID?.trim();
+      if (!clientId) {
+        throw new Error("Add VITE_ADOBE_CLIENT_ID to client/.env to load the Adobe PDF viewer.");
       }
+
+      await loadAdobePdfEmbed();
+      if (cancelled || !window.AdobeDC) return;
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Could not read the PDF.");
+      const buffer = await response.arrayBuffer();
+      if (cancelled) return;
+
+      const view = new window.AdobeDC.View({ clientId, divId: ADOBE_VIEW_ID });
+      await view.previewFile(
+        {
+          content: { promise: Promise.resolve(buffer) },
+          metaData: { fileName },
+        },
+        {
+          embedMode: "FULL_WINDOW",
+          defaultViewMode: "FIT_WIDTH",
+          showDownloadPDF: false,
+          showPrintPDF: false,
+          showAnnotationTools: false,
+        },
+      );
+      if (cancelled) {
+        container.replaceChildren();
+        return;
+      }
+      callbacksRef.current.onRendered();
     };
 
-    void render();
+    render().catch((error: unknown) => {
+      if (cancelled) return;
+      console.error(error);
+      const message = error instanceof Error ? error.message : "Could not render PDF.";
+      callbacksRef.current.onRenderError(message);
+    });
+
     return () => {
       cancelled = true;
+      container.replaceChildren();
     };
-  }, [url, layoutTick]);
+  }, [url, fileName]);
 
-  return <div id="pdf-pages" ref={pagesRef} aria-label="PDF pages" />;
+  return <div id={ADOBE_VIEW_ID} ref={containerRef} aria-label="PDF pages" />;
 }
