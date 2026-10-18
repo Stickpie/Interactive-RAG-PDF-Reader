@@ -374,20 +374,79 @@
 
     .textLayer {
       position: absolute;
-      left: 0;
-      top: 0;
-      right: 0;
-      bottom: 0;
+      text-align: initial;
+      inset: 0;
       overflow: hidden;
       line-height: 1;
+      -webkit-text-size-adjust: none;
+      text-size-adjust: none;
+      forced-color-adjust: none;
+      transform-origin: 0 0;
+      z-index: 2;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      letter-spacing: normal;
+      word-spacing: normal;
+      box-sizing: content-box;
     }
 
-    .textLayer span {
+    .textLayer :is(span, br) {
       color: transparent;
       position: absolute;
       white-space: pre;
       cursor: text;
-      transform-origin: 0 0;
+      transform-origin: 0% 0%;
+      -webkit-text-size-adjust: none;
+      text-size-adjust: none;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      letter-spacing: normal;
+      word-spacing: normal;
+      line-height: 1;
+      box-sizing: content-box;
+    }
+
+    .textLayer span.markedContent {
+      top: 0;
+      height: 0;
+    }
+
+    .textLayer ::selection {
+      background: rgba(0, 100, 255, 0.28);
+    }
+
+    .textLayer br::selection {
+      background: transparent;
+    }
+
+    .textLayer .endOfContent {
+      display: block;
+      position: absolute;
+      inset: 100% 0 0;
+      z-index: -1;
+      cursor: default;
+      pointer-events: none;
+      background: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .textLayer .endOfContent::selection {
+      background: transparent;
+    }
+
+    .textLayer[data-main-rotation="90"] {
+      transform: rotate(90deg) translateY(-100%);
+    }
+
+    .textLayer[data-main-rotation="180"] {
+      transform: rotate(180deg) translate(-100%, -100%);
+    }
+
+    .textLayer[data-main-rotation="270"] {
+      transform: rotate(270deg) translateX(-100%);
     }
 
     .status {
@@ -906,15 +965,6 @@
         margin: 0 auto 20px;
         border-radius: 10px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
-      }
-
-      .pdf-page canvas {
-        width: 100%;
-        height: auto;
-      }
-
-      .textLayer span {
-        font-size: max(16px, 1em) !important;
       }
 
       .mobile-hint {
