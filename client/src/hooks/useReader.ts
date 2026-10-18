@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteLibraryDocument, fetchExampleSimplifiedPdfBlob, inquire, simplifyPdf } from "../lib/api";
-import { isMobileViewport } from "../lib/device";
+import { deviceKind, isMobileViewport } from "../lib/device";
 import { ensureExamplePdfBlobs } from "../lib/examplePdf";
 import { asPdfBlob, blobAsNamedFile, newId, pdfDownloadName } from "../lib/files";
 import { idbDeletePdf, idbGetPdf, idbPutPdf } from "../lib/idb";
@@ -14,12 +14,22 @@ import {
 } from "../lib/libraryStorage";
 import type { PdfEntry, PdfView } from "../types";
 
+export type InquireTurn = {
+  id: string;
+  question: string;
+  answer: string;
+};
+
 export type InquireState = {
   open: boolean;
   segment: string;
   question: string;
   answer: string;
   submitting: boolean;
+  turns: InquireTurn[];
+  panelCollapsed: boolean;
+  notice: string;
+  highlightNonce: number;
 };
 
 const SLOW_STATUS_MS = 30_000;
@@ -37,6 +47,10 @@ const CLOSED_INQUIRE: InquireState = {
   question: "",
   answer: "",
   submitting: false,
+  turns: [],
+  panelCollapsed: false,
+  notice: "",
+  highlightNonce: 0,
 };
 
 function sanitize(state: LibraryState): LibraryState {
@@ -74,6 +88,7 @@ export function useReader() {
   const selectedFileRef = useRef<Blob | null>(null);
   const currentViewRef = useRef<PdfView>("original");
   const inquireRef = useRef(inquireState);
+  const inquireSubmitLock = useRef(false);
   const bootedRef = useRef(false);
 
   currentViewRef.current = currentView;
@@ -505,53 +520,124 @@ export function useReader() {
   }, []);
 
   const openInquire = useCallback((segment: string) => {
-    setInquireState({
-      open: true,
-      segment,
-      question: "",
-      answer: "",
-      submitting: false,
+    const trimmed = segment.trim();
+    if (!trimmed) return;
+    setInquireState((current) => {
+      if (deviceKind() === "desktop") {
+        return {
+          ...current,
+          open: false,
+          segment: trimmed,
+          panelCollapsed: false,
+          notice: "",
+          highlightNonce: current.highlightNonce + 1,
+        };
+      }
+      return {
+        ...current,
+        open: true,
+        segment: trimmed,
+        question: "",
+        answer: "",
+        submitting: false,
+        notice: "",
+      };
     });
   }, []);
 
   const closeInquire = useCallback(() => {
-    setInquireState(CLOSED_INQUIRE);
+    setInquireState((current) => ({
+      ...current,
+      open: false,
+      segment: "",
+      question: "",
+      answer: "",
+      submitting: false,
+      notice: "",
+    }));
+  }, []);
+
+  const suppressInquireDialog = useCallback(() => {
+    setInquireState((current) => (current.open ? { ...current, open: false } : current));
+  }, []);
+
+  const toggleInquirePanel = useCallback(() => {
+    setInquireState((current) => ({ ...current, panelCollapsed: !current.panelCollapsed }));
+  }, []);
+
+  const collapseInquirePanel = useCallback(() => {
+    setInquireState((current) => (current.panelCollapsed ? current : { ...current, panelCollapsed: true }));
   }, []);
 
   const setQuestion = useCallback((question: string) => {
-    setInquireState((current) => ({ ...current, question }));
+    setInquireState((current) => ({ ...current, question, notice: "" }));
   }, []);
 
   const submitInquire = useCallback(async () => {
+    if (inquireSubmitLock.current || inquireRef.current.submitting) return;
+    const desktop = deviceKind() === "desktop";
     const { question, segment } = inquireRef.current;
     const trimmed = question.trim();
     if (!trimmed) {
-      setInquireState((current) => ({ ...current, answer: "Please enter a question." }));
+      setInquireState((current) =>
+        desktop
+          ? { ...current, notice: "Please enter a question." }
+          : { ...current, answer: "Please enter a question." },
+      );
       return;
     }
     if (!segment) {
-      setInquireState((current) => ({ ...current, answer: "No highlighted text." }));
+      setInquireState((current) =>
+        desktop
+          ? { ...current, notice: "No highlighted text." }
+          : { ...current, answer: "No highlighted text." },
+      );
       return;
     }
 
+    const turnId = newId();
+    inquireSubmitLock.current = true;
     setInquireState((current) => ({
       ...current,
+      question: desktop ? "" : current.question,
       answer: "Loading...",
       submitting: true,
+      notice: "",
+      turns: desktop
+        ? [...current.turns, { id: turnId, question: trimmed, answer: "Loading..." }]
+        : current.turns,
     }));
     const slowAnswer = window.setTimeout(() => {
+      const text = "Loading...our CPU is trying it's best";
       setInquireState((current) =>
-        current.submitting ? { ...current, answer: "Loading...our CPU is trying it's best" } : current,
+        current.submitting
+          ? {
+              ...current,
+              answer: text,
+              turns: current.turns.map((turn) => (turn.id === turnId ? { ...turn, answer: text } : turn)),
+            }
+          : current,
       );
     }, SLOW_STATUS_MS);
     try {
       const answer = await inquire(segment, trimmed);
-      setInquireState((current) => ({ ...current, answer, submitting: false }));
+      setInquireState((current) => ({
+        ...current,
+        answer,
+        submitting: false,
+        turns: current.turns.map((turn) => (turn.id === turnId ? { ...turn, answer } : turn)),
+      }));
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : "Could not reach the API. Is the server running?";
-      setInquireState((current) => ({ ...current, answer: message, submitting: false }));
+      setInquireState((current) => ({
+        ...current,
+        answer: message,
+        submitting: false,
+        turns: current.turns.map((turn) => (turn.id === turnId ? { ...turn, answer: message } : turn)),
+      }));
     } finally {
+      inquireSubmitLock.current = false;
       window.clearTimeout(slowAnswer);
     }
   }, []);
@@ -599,6 +685,9 @@ export function useReader() {
     toggleSidebar,
     openInquire,
     closeInquire,
+    suppressInquireDialog,
+    toggleInquirePanel,
+    collapseInquirePanel,
     setQuestion,
     submitInquire,
     handleRendering,
