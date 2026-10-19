@@ -18,6 +18,7 @@ export type InquireTurn = {
   id: string;
   question: string;
   answer: string;
+  segment: string;
 };
 
 export type InquireState = {
@@ -604,7 +605,7 @@ export function useReader() {
       submitting: true,
       notice: "",
       turns: desktop
-        ? [...current.turns, { id: turnId, question: trimmed, answer: "Loading..." }]
+        ? [...current.turns, { id: turnId, question: trimmed, answer: "Loading...", segment }]
         : current.turns,
     }));
     const slowAnswer = window.setTimeout(() => {

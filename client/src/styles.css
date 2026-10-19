@@ -719,6 +719,10 @@
       margin: 0;
     }
 
+    .inquire-turn + .inquire-turn {
+      margin-top: 12px;
+    }
+
     .inquire-bubble {
       width: fit-content;
       max-width: 78%;
@@ -739,6 +743,68 @@
       border-bottom-left-radius: 4px;
       cursor: text;
       user-select: text;
+    }
+
+    .inquire-user-block {
+      align-self: flex-end;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      max-width: 78%;
+    }
+
+    .inquire-user-block:has(.inquire-attachment.is-open) {
+      width: 78%;
+    }
+
+    .inquire-user-block .inquire-bubble.user {
+      max-width: 100%;
+    }
+
+    .inquire-attachment {
+      margin: 0;
+      max-width: 100%;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      color: #cbb6ef;
+      text-align: left;
+    }
+
+    .inquire-attachment.is-open {
+      width: 100%;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .inquire-attachment-toggle {
+      display: inline;
+      margin: 0 0 0 0.35em;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      color: #f3c6ff;
+      font-size: inherit;
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      vertical-align: baseline;
+    }
+
+    .inquire-attachment-toggle::after {
+      display: none;
+    }
+
+    .inquire-attachment-toggle:hover,
+    .inquire-attachment-toggle:active {
+      transform: none;
+      background: none;
+      box-shadow: none;
+      color: #fff;
     }
 
     .inquire-bubble.user {

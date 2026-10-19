@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { InquireState } from "../hooks/useReader";
 
 type InquirePanelProps = {
@@ -12,6 +12,38 @@ type InquirePanelProps = {
 function nodeElement(node: Node | null): Element | null {
   if (!node) return null;
   return node instanceof Element ? node : node.parentElement;
+}
+
+const PREVIEW_LENGTH = 36;
+
+function highlightPreview(text: string): { preview: string; truncated: boolean } {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= PREVIEW_LENGTH) return { preview: normalized, truncated: false };
+  const slice = normalized.slice(0, PREVIEW_LENGTH);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 18 ? slice.slice(0, lastSpace) : slice;
+  return { preview: cut.trimEnd(), truncated: true };
+}
+
+function HighlightAttachment({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const { preview, truncated } = highlightPreview(text);
+
+  return (
+    <p className={`inquire-attachment${open ? " is-open" : ""}`}>
+      <span>{open || !truncated ? text.trim() : `${preview}....`}</span>
+      {truncated ? (
+        <button
+          type="button"
+          className="inquire-attachment-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? "Hide" : "Show More"}
+        </button>
+      ) : null}
+    </p>
+  );
 }
 
 function highlightedPassage(): string | null {
@@ -113,7 +145,10 @@ export function InquirePanel({
             ) : (
               inquire.turns.map((turn) => (
                 <div className="inquire-turn" key={turn.id}>
-                  <div className="inquire-bubble user">{turn.question}</div>
+                  <div className="inquire-user-block">
+                    {turn.segment ? <HighlightAttachment text={turn.segment} /> : null}
+                    <div className="inquire-bubble user">{turn.question}</div>
+                  </div>
                   <div
                     className={`inquire-bubble ai${turn.answer.startsWith("Loading") ? " pending" : ""}`}
                     data-ai-response=""
