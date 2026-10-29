@@ -130,6 +130,7 @@ export function App() {
           </div>
           <PdfViewer
             url={reader.pdfUrl}
+            prefetchUrl={reader.prefetchUrl}
             layoutKind={kind}
             onRendering={reader.handleRendering}
             onRendered={reader.handleRendered}

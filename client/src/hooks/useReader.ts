@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteLibraryDocument, fetchExampleSimplifiedPdfBlob, inquire, simplifyPdf } from "../lib/api";
+import { deleteLibraryDocument, inquire, simplifyPdf } from "../lib/api";
 import { deviceKind, isMobileViewport } from "../lib/device";
-import { ensureExamplePdfBlobs } from "../lib/examplePdf";
+import { loadExampleDocuments, loadExampleSimplified } from "../lib/examplePdf";
+import { releaseRenderedPdf } from "../components/PdfViewer";
 import { asPdfBlob, blobAsNamedFile, newId, pdfDownloadName } from "../lib/files";
 import { idbDeletePdf, idbGetPdf, idbPutPdf } from "../lib/idb";
 import {
@@ -34,7 +35,7 @@ export type InquireState = {
 };
 
 const SLOW_STATUS_MS = 30_000;
-const EXAMPLE_SWITCH_MS = 3_000;
+const EXAMPLE_SWITCH_MS = 5_000;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -78,6 +79,7 @@ export function useReader() {
   const [originalPdfUrl, setOriginalPdfUrl] = useState<string | null>(null);
   const [simplifiedPdfUrl, setSimplifiedPdfUrl] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<PdfView>("original");
+  const [exampleReadyId, setExampleReadyId] = useState<string | null>(null);
   const [simplifying, setSimplifying] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inquireState, setInquireState] = useState<InquireState>(CLOSED_INQUIRE);
@@ -91,16 +93,63 @@ export function useReader() {
   const inquireRef = useRef(inquireState);
   const inquireSubmitLock = useRef(false);
   const bootedRef = useRef(false);
+  const exampleReadyIdRef = useRef<string | null>(null);
+  const exampleSessionRef = useRef<{
+    id: string;
+    originalUrl: string;
+    simplifiedUrl: string | null;
+    originalBlob: Blob;
+  } | null>(null);
+  const renderedUrlsRef = useRef(new Set<string>());
+  const failedUrlsRef = useRef(new Set<string>());
+  const renderedWaitersRef = useRef(new Set<() => void>());
 
   currentViewRef.current = currentView;
   inquireRef.current = inquireState;
 
+  const notifyRenderWaiters = useCallback(() => {
+    renderedWaitersRef.current.forEach((waiter) => waiter());
+  }, []);
+
   const replaceUrl = useCallback((which: "original" | "simplified", next: string | null) => {
     const previous = urlsRef.current[which];
-    if (previous) URL.revokeObjectURL(previous);
+    const session = exampleSessionRef.current;
+    const preserved = Boolean(
+      previous && session && (previous === session.originalUrl || previous === session.simplifiedUrl),
+    );
+    if (previous && previous !== next && !preserved) {
+      URL.revokeObjectURL(previous);
+      releaseRenderedPdf(previous);
+      renderedUrlsRef.current.delete(previous);
+      failedUrlsRef.current.delete(previous);
+    }
     urlsRef.current[which] = next;
     if (which === "original") setOriginalPdfUrl(next);
     else setSimplifiedPdfUrl(next);
+  }, []);
+
+  const publishUrls = useCallback((original: string | null, simplified: string | null) => {
+    urlsRef.current = { original, simplified };
+    setOriginalPdfUrl(original);
+    setSimplifiedPdfUrl(simplified);
+  }, []);
+
+  const waitUntilRendered = useCallback((url: string) => {
+    if (renderedUrlsRef.current.has(url)) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const waiter = () => {
+        if (renderedUrlsRef.current.has(url)) {
+          renderedWaitersRef.current.delete(waiter);
+          resolve();
+          return;
+        }
+        if (failedUrlsRef.current.has(url)) {
+          renderedWaitersRef.current.delete(waiter);
+          reject(new Error("Could not render the simplified example PDF."));
+        }
+      };
+      renderedWaitersRef.current.add(waiter);
+    });
   }, []);
 
   const commitLibrary = useCallback((next: LibraryState) => {
@@ -112,8 +161,14 @@ export function useReader() {
 
   useEffect(() => {
     return () => {
-      if (urlsRef.current.original) URL.revokeObjectURL(urlsRef.current.original);
-      if (urlsRef.current.simplified) URL.revokeObjectURL(urlsRef.current.simplified);
+      const session = exampleSessionRef.current;
+      const seen = new Set<string>();
+      for (const url of [urlsRef.current.original, urlsRef.current.simplified, session?.originalUrl, session?.simplifiedUrl]) {
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        URL.revokeObjectURL(url);
+        releaseRenderedPdf(url);
+      }
     };
   }, []);
 
@@ -155,23 +210,72 @@ export function useReader() {
     [replaceUrl],
   );
 
+  const attachExampleSimplified = useCallback((pdfId: string, blob: Blob) => {
+    const session = exampleSessionRef.current;
+    if (!session || session.id !== pdfId || session.simplifiedUrl) return;
+    const simplifiedUrl = URL.createObjectURL(asPdfBlob(blob));
+    session.simplifiedUrl = simplifiedUrl;
+    if (libraryStateRef.current.selectedPdfId === pdfId) {
+      urlsRef.current.simplified = simplifiedUrl;
+      setSimplifiedPdfUrl(simplifiedUrl);
+    }
+  }, []);
+
+  const openExample = useCallback(
+    async (pdfId: string) => {
+      const session = exampleSessionRef.current;
+      if (session?.id === pdfId && session.originalUrl) {
+        publishUrls(session.originalUrl, session.simplifiedUrl);
+        selectedFileRef.current = blobAsNamedFile(session.originalBlob, EXAMPLE_PDF_NAME);
+        currentViewRef.current = "original";
+        setCurrentView("original");
+        setStatus("Showing original PDF (select text to inquire).");
+        return;
+      }
+
+      setStatus("Loading example PDF…");
+      const documents = await loadExampleDocuments(pdfId);
+      if (!documents.original || libraryStateRef.current.selectedPdfId !== pdfId) {
+        if (libraryStateRef.current.selectedPdfId === pdfId) setStatus("PDF data missing; upload again.");
+        return;
+      }
+
+      const originalBlob = asPdfBlob(documents.original);
+      const originalUrl = URL.createObjectURL(originalBlob);
+      const simplifiedUrl = documents.simplified ? URL.createObjectURL(asPdfBlob(documents.simplified)) : null;
+      exampleSessionRef.current = { id: pdfId, originalUrl, simplifiedUrl, originalBlob };
+      selectedFileRef.current = blobAsNamedFile(originalBlob, EXAMPLE_PDF_NAME);
+      publishUrls(originalUrl, simplifiedUrl);
+      currentViewRef.current = "original";
+      setCurrentView("original");
+
+      if (!simplifiedUrl) {
+        void loadExampleSimplified(pdfId, originalBlob)
+          .then((blob) => attachExampleSimplified(pdfId, blob))
+          .catch((error) => console.warn(error));
+      }
+    },
+    [attachExampleSimplified, publishUrls],
+  );
+
   const selectPdf = useCallback(
     async (pdfId: string) => {
       const pdf = libraryStateRef.current.library.pdfs.find((entry) => entry.id === pdfId);
       if (!pdf) return;
       commitLibrary({ ...libraryStateRef.current, selectedPdfId: pdfId });
 
-      let blobs = pdf.displayName === EXAMPLE_PDF_NAME ? { original: null, simplified: null } : await idbGetPdf(pdfId);
       if (pdf.displayName === EXAMPLE_PDF_NAME) {
         try {
-          setStatus("Loading example PDF…");
-          blobs = await ensureExamplePdfBlobs(pdfId);
+          await openExample(pdfId);
         } catch (error) {
           console.error(error);
           setStatus("PDF data missing; upload again.");
-          return;
         }
+        if (isMobileViewport()) setSidebarOpen(false);
+        return;
       }
+
+      const blobs = await idbGetPdf(pdfId);
       if (!blobs.original) {
         setStatus("PDF data missing; upload again.");
         return;
@@ -180,7 +284,7 @@ export function useReader() {
       showPdfBlobs(blobs.original, blobs.simplified, pdf.displayName);
       if (isMobileViewport()) setSidebarOpen(false);
     },
-    [commitLibrary, showPdfBlobs],
+    [commitLibrary, openExample, showPdfBlobs],
   );
 
   const seedExamplePdfIfNeeded = useCallback(async (): Promise<boolean> => {
@@ -228,13 +332,8 @@ export function useReader() {
         selectedFolderId: folderId,
         selectedPdfId: pdfId,
       });
-      const blobs = await ensureExamplePdfBlobs(pdfId);
-      if (!blobs.original) throw new Error("Example PDF fetch failed");
       markExampleSeeded();
-      showPdfBlobs(blobs.original, blobs.simplified, EXAMPLE_PDF_NAME);
-      setStatus(
-        blobs.simplified ? "Example PDF loaded." : "Example PDF loaded, but the simplified file was not found.",
-      );
+      await selectPdf(pdfId);
       return true;
     } catch (error) {
       console.error(error);
@@ -258,7 +357,7 @@ export function useReader() {
       setStatus(`Could not load example PDF.${detail}`);
       return false;
     }
-  }, [commitLibrary, ensureFolderForUpload, selectPdf, showPdfBlobs]);
+  }, [commitLibrary, ensureFolderForUpload, selectPdf]);
 
   useEffect(() => {
     if (bootedRef.current) return;
@@ -342,6 +441,19 @@ export function useReader() {
       }
 
       await idbDeletePdf(pdfId);
+      if (exampleSessionRef.current?.id === pdfId) {
+        releaseRenderedPdf(exampleSessionRef.current.originalUrl);
+        URL.revokeObjectURL(exampleSessionRef.current.originalUrl);
+        if (exampleSessionRef.current.simplifiedUrl) {
+          releaseRenderedPdf(exampleSessionRef.current.simplifiedUrl);
+          URL.revokeObjectURL(exampleSessionRef.current.simplifiedUrl);
+        }
+        exampleSessionRef.current = null;
+        if (exampleReadyIdRef.current === pdfId) {
+          exampleReadyIdRef.current = null;
+          setExampleReadyId(null);
+        }
+      }
       const latest = libraryStateRef.current;
       const wasSelected = latest.selectedPdfId === pdfId;
       commitLibrary({
@@ -421,20 +533,23 @@ export function useReader() {
 
     const targetPdfId = libraryStateRef.current.selectedPdfId;
     const selected = libraryStateRef.current.library.pdfs.find((pdf) => pdf.id === targetPdfId);
-    if (selected?.displayName === EXAMPLE_PDF_NAME) {
+    if (selected?.displayName === EXAMPLE_PDF_NAME && targetPdfId) {
       setSimplifying(true);
       setStatus("Uploading and simplifying…");
+      const delay = wait(EXAMPLE_SWITCH_MS);
       try {
-        if (!urlsRef.current.simplified) {
-          const blob = await fetchExampleSimplifiedPdfBlob();
-          replaceUrl("simplified", URL.createObjectURL(blob));
-          if (targetPdfId) {
-            const fromIdb = await idbGetPdf(targetPdfId);
-            if (fromIdb.original) await idbPutPdf(targetPdfId, asPdfBlob(fromIdb.original), blob);
-          }
+        let simplifiedUrl = urlsRef.current.simplified;
+        if (!simplifiedUrl) {
+          const blob = await loadExampleSimplified(targetPdfId, selectedFileRef.current);
+          if (libraryStateRef.current.selectedPdfId !== targetPdfId) return;
+          attachExampleSimplified(targetPdfId, blob);
+          simplifiedUrl = exampleSessionRef.current?.simplifiedUrl ?? null;
         }
-        await wait(EXAMPLE_SWITCH_MS);
+        if (!simplifiedUrl) throw new Error("Simplified example PDF is missing.");
+        await Promise.all([delay, waitUntilRendered(simplifiedUrl)]);
         if (libraryStateRef.current.selectedPdfId !== targetPdfId) return;
+        exampleReadyIdRef.current = targetPdfId;
+        setExampleReadyId(targetPdfId);
         currentViewRef.current = "simplified";
         setCurrentView("simplified");
         setStatus("Simplified PDF ready.");
@@ -487,7 +602,7 @@ export function useReader() {
       window.clearTimeout(slowStatus);
       setSimplifying(false);
     }
-  }, [commitLibrary, replaceUrl]);
+  }, [attachExampleSimplified, commitLibrary, replaceUrl, waitUntilRendered]);
 
   const showOriginal = useCallback(() => {
     if (!urlsRef.current.original) return;
@@ -497,6 +612,10 @@ export function useReader() {
 
   const showSimplified = useCallback(() => {
     if (!urlsRef.current.simplified) return;
+    const selected = libraryStateRef.current.library.pdfs.find(
+      (pdf) => pdf.id === libraryStateRef.current.selectedPdfId,
+    );
+    if (selected?.displayName === EXAMPLE_PDF_NAME && exampleReadyIdRef.current !== selected.id) return;
     currentViewRef.current = "simplified";
     setCurrentView("simplified");
   }, []);
@@ -647,17 +766,43 @@ export function useReader() {
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
 
-  const handleRendering = useCallback(() => setStatus("Rendering PDF…"), []);
-  const handleRenderError = useCallback(() => setStatus("Could not render PDF."), []);
-  const handleRendered = useCallback(() => {
+  const handleRendering = useCallback((renderedUrl: string) => {
+    const viewingSimplified = currentViewRef.current === "simplified";
+    const currentUrl = viewingSimplified ? urlsRef.current.simplified : urlsRef.current.original;
+    if (renderedUrl !== currentUrl) return;
+    setStatus("Rendering PDF…");
+  }, []);
+  const handleRenderError = useCallback((renderedUrl?: string) => {
+    if (renderedUrl) {
+      failedUrlsRef.current.add(renderedUrl);
+      notifyRenderWaiters();
+    }
+    const viewingSimplified = currentViewRef.current === "simplified";
+    const currentUrl = viewingSimplified ? urlsRef.current.simplified : urlsRef.current.original;
+    if (renderedUrl && renderedUrl !== currentUrl) return;
+    setStatus("Could not render PDF.");
+  }, [notifyRenderWaiters]);
+  const handleRendered = useCallback((renderedUrl: string) => {
+    if (!renderedUrl) return;
+    renderedUrlsRef.current.add(renderedUrl);
+    notifyRenderWaiters();
+    const viewingSimplified = currentViewRef.current === "simplified";
+    const currentUrl = viewingSimplified ? urlsRef.current.simplified : urlsRef.current.original;
+    if (renderedUrl !== currentUrl) return;
     setStatus(
-      currentViewRef.current === "simplified"
+      viewingSimplified
         ? "Showing simplified PDF (select text to inquire)."
         : "Showing original PDF (select text to inquire).",
     );
-  }, []);
+  }, [notifyRenderWaiters]);
 
   const pdfUrl = currentView === "simplified" ? simplifiedPdfUrl : originalPdfUrl;
+  const prefetchUrl = currentView === "simplified" ? originalPdfUrl : simplifiedPdfUrl;
+  const selectedPdf = libraryState.library.pdfs.find((pdf) => pdf.id === libraryState.selectedPdfId);
+  const simplifiedReady =
+    selectedPdf?.displayName === EXAMPLE_PDF_NAME
+      ? exampleReadyId === selectedPdf.id && simplifiedPdfUrl !== null
+      : simplifiedPdfUrl !== null;
 
   return {
     folders: libraryState.library.folders,
@@ -666,8 +811,9 @@ export function useReader() {
     selectedPdfId: libraryState.selectedPdfId,
     status,
     pdfUrl,
+    prefetchUrl,
     currentView,
-    simplifiedReady: simplifiedPdfUrl !== null,
+    simplifiedReady,
     simplifying,
     sidebarOpen,
     inquireState,

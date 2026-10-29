@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { DeviceKind } from "../lib/device";
 import pdfjsLib from "../pdfSetup";
 
 type PdfViewerProps = {
   url: string | null;
+  prefetchUrl?: string | null;
   layoutKind: DeviceKind;
-  onRendering: () => void;
-  onRendered: () => void;
-  onRenderError: () => void;
+  onRendering: (url: string) => void;
+  onRendered: (url: string) => void;
+  onRenderError: (url: string) => void;
   onTextSelect: (text: string) => void;
 };
 
@@ -151,8 +152,159 @@ async function snapshotPage(
   return { image, url };
 }
 
+type CachedPages = { holder: HTMLDivElement; urls: string[] };
+
+const pageCache = new Map<string, CachedPages>();
+const pageRenders = new Map<string, Promise<CachedPages | null>>();
+let activeLayout = "";
+
+function cacheKey(url: string, layoutWidth: number, layoutKind: DeviceKind) {
+  return `${layoutKind}:${layoutWidth}:${url}`;
+}
+
+function layoutPrefix(layoutWidth: number, layoutKind: DeviceKind) {
+  return `${layoutKind}:${layoutWidth}:`;
+}
+
+function dropCached(cached: CachedPages) {
+  revokeUrls(cached.urls);
+}
+
+export function releaseRenderedPdf(url: string) {
+  for (const [key, cached] of pageCache) {
+    if (key.endsWith(`:${url}`)) {
+      pageCache.delete(key);
+      dropCached(cached);
+    }
+  }
+}
+
+function retainActiveLayout() {
+  for (const [key, cached] of pageCache) {
+    if (!key.startsWith(activeLayout)) {
+      pageCache.delete(key);
+      dropCached(cached);
+    }
+  }
+}
+
+function showCached(container: HTMLElement, cached: CachedPages) {
+  for (const child of [...container.children]) {
+    if (child !== cached.holder) (child as HTMLElement).style.display = "none";
+  }
+  cached.holder.style.display = "";
+  if (cached.holder.parentElement !== container) container.append(cached.holder);
+}
+
+async function renderPages(
+  url: string,
+  layoutWidth: number,
+  layoutKind: DeviceKind,
+): Promise<CachedPages | null> {
+  const localUrls: string[] = [];
+  const holder = document.createElement("div");
+  const pdf = await pdfjsLib.getDocument(url).promise;
+  try {
+    const firstPage = await pdf.getPage(1);
+    const viewportAt1 = firstPage.getViewport({ scale: 1 });
+    const horizontalPadding = layoutKind === "mobile" ? 32 : 36;
+    const maxWidth = Math.max(layoutWidth - horizontalPadding, 280);
+    const fitScale = maxWidth / viewportAt1.width;
+    const scale =
+      layoutKind === "mobile" ? fitScale : Math.min(layoutKind === "tablet" ? 1.1 : 1.25, fitScale);
+    const pixelRatio = window.devicePixelRatio || 1;
+    const outputScale = layoutKind === "mobile" ? Math.min(pixelRatio, 2) : pixelRatio;
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = pageNumber === 1 ? firstPage : await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale });
+      const wrap = document.createElement("div");
+      wrap.className = "pdf-page";
+      wrap.style.width = `${viewport.width}px`;
+      wrap.style.height = `${viewport.height}px`;
+
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not get a canvas drawing context.");
+      canvas.width = Math.max(1, Math.floor(viewport.width * outputScale));
+      canvas.height = Math.max(1, Math.floor(viewport.height * outputScale));
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+      const renderTask = page.render({
+        canvasContext: context,
+        viewport,
+        ...(outputScale === 1 ? {} : { transform: [outputScale, 0, 0, outputScale, 0, 0] }),
+      });
+      await renderTask.promise;
+
+      const textLayerDiv = document.createElement("div");
+      textLayerDiv.className = "textLayer";
+      textLayerDiv.style.setProperty("--scale-factor", String(viewport.scale));
+      const textContent = await page.getTextContent();
+      try {
+        const textLayer = pdfjsLib.renderTextLayer({
+          textContentSource: textContent,
+          container: textLayerDiv,
+          viewport,
+          textDivs: [],
+        });
+        await textLayer.promise;
+      } catch (error) {
+        console.warn("renderTextLayer failed, using fallback", error);
+        textLayerDiv.replaceChildren();
+        renderTextLayerFallback(textContent, textLayerDiv, viewport);
+      }
+
+      finishTextLayer(textLayerDiv);
+      const snapshot = await snapshotPage(canvas, viewport);
+      if (snapshot) {
+        localUrls.push(snapshot.url);
+        wrap.append(snapshot.image, textLayerDiv);
+      } else {
+        wrap.append(canvas, textLayerDiv);
+      }
+      holder.append(wrap);
+    }
+
+    return { holder, urls: localUrls };
+  } catch (error) {
+    revokeUrls(localUrls);
+    throw error;
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+function requestPages(url: string, layoutWidth: number, layoutKind: DeviceKind): Promise<CachedPages | null> {
+  const key = cacheKey(url, layoutWidth, layoutKind);
+  const cached = pageCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  const pending = pageRenders.get(key);
+  if (pending) return pending;
+
+  const layout = layoutPrefix(layoutWidth, layoutKind);
+  const promise = renderPages(url, layoutWidth, layoutKind)
+    .then((result) => {
+      pageRenders.delete(key);
+      if (!result) return null;
+      if (activeLayout !== layout) {
+        dropCached(result);
+        return null;
+      }
+      pageCache.set(key, result);
+      return result;
+    })
+    .catch((error) => {
+      pageRenders.delete(key);
+      throw error;
+    });
+  pageRenders.set(key, promise);
+  return promise;
+}
+
 export function PdfViewer({
   url,
+  prefetchUrl = null,
   layoutKind,
   onRendering,
   onRendered,
@@ -160,10 +312,10 @@ export function PdfViewer({
   onTextSelect,
 }: PdfViewerProps) {
   const pagesRef = useRef<HTMLDivElement>(null);
-  const pageUrlsRef = useRef<string[]>([]);
   const callbacksRef = useRef({ onRendering, onRendered, onRenderError, onTextSelect });
   callbacksRef.current = { onRendering, onRendered, onRenderError, onTextSelect };
   const [layoutWidth, setLayoutWidth] = useState(0);
+  const [paintedKey, setPaintedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const container = pagesRef.current;
@@ -191,148 +343,71 @@ export function PdfViewer({
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      revokeUrls(pageUrlsRef.current);
-      pageUrlsRef.current = [];
-    };
-  }, []);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = pagesRef.current;
     if (!container) return;
     if (!url) {
-      revokeUrls(pageUrlsRef.current);
-      pageUrlsRef.current = [];
-      container.innerHTML = "";
+      container.replaceChildren();
       return;
     }
     if (layoutWidth <= 0) return;
 
+    activeLayout = layoutPrefix(layoutWidth, layoutKind);
+    retainActiveLayout();
+    const key = cacheKey(url, layoutWidth, layoutKind);
+    const cached = pageCache.get(key);
+    if (cached) {
+      showCached(container, cached);
+      callbacksRef.current.onRendered(url);
+      setPaintedKey((current) => (current === key ? current : key));
+      return;
+    }
+
     let cancelled = false;
-    let activeRender: { cancel: () => void } | null = null;
-    const localUrls: string[] = [];
-    const stillCurrent = () => !cancelled;
-
-    const render = async () => {
-      callbacksRef.current.onRendering();
-      // Keep the current pages mounted until the next ones are ready. Clearing
-      // here drops the desktop scrollbar, changes clientWidth, and the resize
-      // observer starts this effect again.
-      const fragment = document.createDocumentFragment();
-      try {
-        const pdf = await pdfjsLib.getDocument(url).promise;
-        if (!stillCurrent()) return;
-        const firstPage = await pdf.getPage(1);
-        if (!stillCurrent()) return;
-
-        const viewportAt1 = firstPage.getViewport({ scale: 1 });
-        const horizontalPadding = layoutKind === "mobile" ? 32 : 36;
-        const maxWidth = Math.max(layoutWidth - horizontalPadding, 280);
-        const fitScale = maxWidth / viewportAt1.width;
-        const scale =
-          layoutKind === "mobile" ? fitScale : Math.min(layoutKind === "tablet" ? 1.1 : 1.25, fitScale);
-        const pixelRatio = window.devicePixelRatio || 1;
-        const outputScale = layoutKind === "mobile" ? Math.min(pixelRatio, 2) : pixelRatio;
-
-        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-          const page = pageNumber === 1 ? firstPage : await pdf.getPage(pageNumber);
-          if (!stillCurrent()) return;
-          const viewport = page.getViewport({ scale });
-          const wrap = document.createElement("div");
-          wrap.className = "pdf-page";
-          wrap.style.width = `${viewport.width}px`;
-          wrap.style.height = `${viewport.height}px`;
-
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          if (!context) throw new Error("Could not get a canvas drawing context.");
-          canvas.width = Math.max(1, Math.floor(viewport.width * outputScale));
-          canvas.height = Math.max(1, Math.floor(viewport.height * outputScale));
-          canvas.style.width = `${viewport.width}px`;
-          canvas.style.height = `${viewport.height}px`;
-          const renderTask = page.render({
-            canvasContext: context,
-            viewport,
-            ...(outputScale === 1 ? {} : { transform: [outputScale, 0, 0, outputScale, 0, 0] }),
-          });
-          activeRender = renderTask;
-          try {
-            await renderTask.promise;
-          } catch (error) {
-            if (!stillCurrent()) return;
-            throw error;
-          }
-          if (!stillCurrent()) return;
-
-          const textLayerDiv = document.createElement("div");
-          textLayerDiv.className = "textLayer";
-          textLayerDiv.style.setProperty("--scale-factor", String(viewport.scale));
-          const textContent = await page.getTextContent();
-          if (!stillCurrent()) return;
-
-          try {
-            const textLayer = pdfjsLib.renderTextLayer({
-              textContentSource: textContent,
-              container: textLayerDiv,
-              viewport,
-              textDivs: [],
-            });
-            await textLayer.promise;
-            if (!stillCurrent()) return;
-          } catch (error) {
-            if (!stillCurrent()) return;
-            console.warn("renderTextLayer failed, using fallback", error);
-            textLayerDiv.replaceChildren();
-            renderTextLayerFallback(textContent, textLayerDiv, viewport);
-          }
-
-          finishTextLayer(textLayerDiv);
-          const snapshot = await snapshotPage(canvas, viewport);
-          if (!stillCurrent()) {
-            if (snapshot) URL.revokeObjectURL(snapshot.url);
-            return;
-          }
-          if (snapshot) {
-            localUrls.push(snapshot.url);
-            wrap.append(snapshot.image, textLayerDiv);
-          } else {
-            wrap.append(canvas, textLayerDiv);
-          }
-          fragment.append(wrap);
-        }
-
-        if (!stillCurrent()) return;
-        const previousUrls = pageUrlsRef.current;
-        pageUrlsRef.current = localUrls;
-        container.replaceChildren(fragment);
-        revokeUrls(previousUrls);
-        callbacksRef.current.onRendered();
-      } catch (error) {
-        if (!stillCurrent() || isRenderCancel(error)) return;
-        revokeUrls(localUrls);
-        localUrls.length = 0;
+    callbacksRef.current.onRendering(url);
+    void requestPages(url, layoutWidth, layoutKind)
+      .then((result) => {
+        if (cancelled || !result || !pagesRef.current) return;
+        showCached(pagesRef.current, result);
+        callbacksRef.current.onRendered(url);
+        setPaintedKey(key);
+      })
+      .catch((error) => {
+        if (cancelled || isRenderCancel(error)) return;
         console.error(error);
-        callbacksRef.current.onRenderError();
-      }
-    };
+        callbacksRef.current.onRenderError(url);
+      });
 
-    void render();
     return () => {
       cancelled = true;
-      try {
-        activeRender?.cancel();
-      } catch {
-        // The task may already have finished.
-      }
-      // Committed URLs are the live page images. Drop only a render that
-      // never finished; the next render releases the committed ones.
-      if (pageUrlsRef.current !== localUrls) {
-        revokeUrls(localUrls);
-        localUrls.length = 0;
-      }
     };
   }, [url, layoutWidth, layoutKind]);
+
+  useEffect(() => {
+    if (!prefetchUrl || !url || prefetchUrl === url || layoutWidth <= 0) return;
+    if (paintedKey !== cacheKey(url, layoutWidth, layoutKind)) return;
+    const key = cacheKey(prefetchUrl, layoutWidth, layoutKind);
+    if (pageCache.has(key)) {
+      callbacksRef.current.onRendered(prefetchUrl);
+      return;
+    }
+
+    let cancelled = false;
+    void requestPages(prefetchUrl, layoutWidth, layoutKind)
+      .then((result) => {
+        if (cancelled || !result) return;
+        callbacksRef.current.onRendered(prefetchUrl);
+      })
+      .catch((error) => {
+        if (cancelled || isRenderCancel(error)) return;
+        console.error(error);
+        callbacksRef.current.onRenderError(prefetchUrl);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prefetchUrl, url, layoutWidth, layoutKind, paintedKey]);
 
   const readSelection = () => {
     const text = window.getSelection()?.toString().trim() ?? "";

@@ -336,6 +336,17 @@
       box-shadow: none;
     }
 
+    .view-segment button:disabled,
+    .view-segment button:disabled:hover {
+      opacity: 0.35;
+      color: #8b8298;
+      background: rgba(255, 255, 255, 0.04);
+      border-color: transparent;
+      box-shadow: none;
+      transform: none;
+      cursor: not-allowed;
+    }
+
     .active {
       background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.74));
       color: white;

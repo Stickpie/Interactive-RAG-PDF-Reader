@@ -31,7 +31,7 @@ async function fetchPdfBlob(urls: string[], label: string): Promise<Blob> {
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, { cache: "no-store" });
+      const response = await fetch(url);
       if (!response.ok) {
         lastError = new Error(`${label} fetch failed (${response.status}) at ${url}`);
         continue;
@@ -51,12 +51,12 @@ async function fetchPdfBlob(urls: string[], label: string): Promise<Blob> {
 }
 
 export function fetchExamplePdfBlob(): Promise<Blob> {
-  return fetchPdfBlob([`${API_BASE}/example-pdf`, "ExamplePDF.pdf"], "Example PDF");
+  return fetchPdfBlob(["ExamplePDF.pdf", `${API_BASE}/example-pdf`], "Example PDF");
 }
 
 export function fetchExampleSimplifiedPdfBlob(): Promise<Blob> {
   return fetchPdfBlob(
-    [`${API_BASE}/example-pdf-simplified`, "ExamplePDF-simplified.pdf"],
+    ["ExamplePDF-simplified.pdf", `${API_BASE}/example-pdf-simplified`],
     "Simplified example PDF",
   );
 }

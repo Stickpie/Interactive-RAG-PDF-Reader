@@ -89,7 +89,7 @@ def _example_pdf_response(filename: str):
         path=path,
         media_type="application/pdf",
         filename=filename,
-        headers={"Cache-Control": "no-store"},
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
