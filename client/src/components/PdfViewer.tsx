@@ -216,9 +216,10 @@ export function PdfViewer({
 
     const render = async () => {
       callbacksRef.current.onRendering();
-      revokeUrls(pageUrlsRef.current);
-      pageUrlsRef.current = [];
-      container.innerHTML = "";
+      // Keep the current pages mounted until the next ones are ready. Clearing
+      // here drops the desktop scrollbar, changes clientWidth, and the resize
+      // observer starts this effect again.
+      const fragment = document.createDocumentFragment();
       try {
         const pdf = await pdfjsLib.getDocument(url).promise;
         if (!stillCurrent()) return;
@@ -241,7 +242,6 @@ export function PdfViewer({
           const wrap = document.createElement("div");
           wrap.className = "pdf-page";
           wrap.style.width = `${viewport.width}px`;
-          wrap.style.maxWidth = "100%";
           wrap.style.height = `${viewport.height}px`;
 
           const canvas = document.createElement("canvas");
@@ -299,15 +299,19 @@ export function PdfViewer({
           } else {
             wrap.append(canvas, textLayerDiv);
           }
-          container.append(wrap);
+          fragment.append(wrap);
         }
 
         if (!stillCurrent()) return;
+        const previousUrls = pageUrlsRef.current;
         pageUrlsRef.current = localUrls;
+        container.replaceChildren(fragment);
+        revokeUrls(previousUrls);
         callbacksRef.current.onRendered();
       } catch (error) {
         if (!stillCurrent() || isRenderCancel(error)) return;
-        if (localUrls.length > 0) pageUrlsRef.current = localUrls;
+        revokeUrls(localUrls);
+        localUrls.length = 0;
         console.error(error);
         callbacksRef.current.onRenderError();
       }
