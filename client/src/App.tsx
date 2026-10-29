@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { InquireDialog } from "./components/InquireDialog";
+import { InquirePanel } from "./components/InquirePanel";
 import { PdfViewer } from "./components/PdfViewer";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
@@ -24,8 +25,16 @@ export function App() {
   }, [kind, reader.closeSidebar]);
 
   useEffect(() => {
+    if (kind === "desktop") reader.suppressInquireDialog();
+  }, [kind, reader.suppressInquireDialog]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (kind === "desktop") {
+        if (!reader.inquireState.panelCollapsed) reader.collapseInquirePanel();
+        return;
+      }
       if (reader.inquireState.open) {
         reader.closeInquire();
       } else if (deviceKind() === "mobile" && reader.sidebarOpen) {
@@ -34,7 +43,15 @@ export function App() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [reader.inquireState.open, reader.sidebarOpen, reader.closeInquire, reader.closeSidebar]);
+  }, [
+    kind,
+    reader.inquireState.open,
+    reader.inquireState.panelCollapsed,
+    reader.sidebarOpen,
+    reader.closeInquire,
+    reader.closeSidebar,
+    reader.collapseInquirePanel,
+  ]);
 
   const openFilePicker = () => fileInputRef.current?.click();
 
@@ -121,16 +138,30 @@ export function App() {
           />
           <p className="mobile-hint">Tap text to ask AI query…</p>
         </div>
+
+        {kind === "desktop" && (
+          <InquirePanel
+            inquire={reader.inquireState}
+            onQuestionChange={reader.setQuestion}
+            onSubmit={() => {
+              void reader.submitInquire();
+            }}
+            onToggleCollapsed={reader.toggleInquirePanel}
+            onHighlight={reader.openInquire}
+          />
+        )}
       </div>
 
-      <InquireDialog
-        inquire={reader.inquireState}
-        onQuestionChange={reader.setQuestion}
-        onClose={reader.closeInquire}
-        onSubmit={() => {
-          void reader.submitInquire();
-        }}
-      />
+      {kind !== "desktop" && (
+        <InquireDialog
+          inquire={reader.inquireState}
+          onQuestionChange={reader.setQuestion}
+          onClose={reader.closeInquire}
+          onSubmit={() => {
+            void reader.submitInquire();
+          }}
+        />
+      )}
     </>
   );
 }
