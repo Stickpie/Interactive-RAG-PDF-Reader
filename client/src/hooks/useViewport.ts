@@ -8,16 +8,12 @@ import {
   type DeviceKind,
 } from "../lib/device";
 
-export function useViewport(): { kind: DeviceKind; tick: number } {
+export function useViewport(): DeviceKind {
   const [kind, setKind] = useState<DeviceKind>(() => deviceKind());
-  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let timer = 0;
-    const apply = () => {
-      setKind(deviceKind());
-      setTick((value) => value + 1);
-    };
+    const apply = () => setKind(deviceKind());
     const onResize = () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(apply, 200);
@@ -33,5 +29,5 @@ export function useViewport(): { kind: DeviceKind; tick: number } {
     };
   }, []);
 
-  return { kind, tick };
+  return kind;
 }

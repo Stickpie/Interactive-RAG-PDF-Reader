@@ -364,12 +364,18 @@
       margin: 0 auto 18px;
       border-radius: 8px;
       overflow: hidden;
+      isolation: isolate;
+      background: #fff;
       box-shadow: 0 18px 55px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
 
-    .pdf-page canvas {
+    .pdf-page canvas,
+    .pdf-page img {
       display: block;
       vertical-align: top;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .textLayer {
@@ -393,6 +399,7 @@
 
     .textLayer :is(span, br) {
       color: transparent;
+      -webkit-text-fill-color: transparent;
       position: absolute;
       white-space: pre;
       cursor: text;
@@ -625,8 +632,19 @@
       ((hover: none) and (pointer: coarse) and (max-device-width: 1024px)),
       (display-mode: standalone)
     {
+      html,
+      body {
+        height: 100vh;
+        height: 100svh;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+
       body {
         font-size: 16px;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
         padding-bottom: calc(76px + env(safe-area-inset-bottom));
       }
 
@@ -637,10 +655,9 @@
         padding: 10px 14px;
         padding-top: max(10px, env(safe-area-inset-top));
         border-bottom: 1px solid var(--border);
-        background: rgba(12, 10, 24, 0.96);
-        backdrop-filter: blur(18px);
-        position: sticky;
-        top: 0;
+        background: #0c0a18;
+        position: relative;
+        flex-shrink: 0;
         z-index: 200;
       }
 
@@ -714,10 +731,11 @@
         margin-left: 0;
         padding: 8px 14px;
         border-bottom: 1px solid var(--border);
-        background: rgba(10, 8, 22, 0.94);
+        background: #0a0816;
         position: sticky;
-        top: calc(44px + max(10px, env(safe-area-inset-top)));
+        top: 0;
         z-index: 190;
+        flex-shrink: 0;
       }
 
       .view-segment button {
@@ -764,16 +782,20 @@
         opacity: 0;
         pointer-events: none;
         transition: opacity 220ms ease;
-        backdrop-filter: blur(4px);
       }
 
       body.sidebar-open .sidebar-backdrop {
         opacity: 1;
         pointer-events: auto;
+        backdrop-filter: blur(4px);
       }
 
       .app-shell {
+        flex: 1;
         flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
       }
 
       .sidebar {
@@ -919,8 +941,15 @@
         padding: 0;
         width: 100%;
         flex: 1;
+        min-width: 0;
+        min-height: 0;
         display: flex;
         flex-direction: column;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        background-color: #070712;
       }
 
       .toolbar-wrap {
@@ -943,32 +972,35 @@
         padding: 10px 16px 4px;
         font-size: 0.9rem;
         min-height: 1.4em;
+        flex-shrink: 0;
         color: #d8c8f6;
         text-shadow: 0 0 14px rgba(168, 85, 247, 0.22);
       }
 
       #pdf-pages {
-        flex: 1;
+        flex: 1 0 auto;
+        width: 100%;
         max-height: none;
+        min-width: 0;
         min-height: 50vh;
-        overflow: auto;
+        overflow: visible;
         border: none;
         border-radius: 0;
         background: transparent;
         padding: 18px 16px 12px;
         box-shadow: none;
-        -webkit-overflow-scrolling: touch;
       }
 
       .pdf-page {
         max-width: 100%;
         margin: 0 auto 20px;
         border-radius: 10px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
       }
 
       .mobile-hint {
         margin: 0 16px 18px;
+        flex-shrink: 0;
         padding: 12px 14px;
         text-align: center;
         font-size: 0.9rem;
@@ -993,8 +1025,7 @@
         border-radius: 0;
         border: none;
         border-top: 1px solid var(--border);
-        background: rgba(10, 8, 22, 0.96);
-        backdrop-filter: blur(18px);
+        background: #0a0816;
         box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.35);
       }
 
